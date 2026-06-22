@@ -177,6 +177,47 @@ public class PlayerActivityServiceTest
 	}
 
 	@Test
+	public void deathResolvesAboveLowHealth()
+	{
+		PlayerActivityService service = new PlayerActivityService();
+		service.setLoggedIn(true);
+		service.setLowHitpoints(true);
+		service.setDead(true);
+
+		// Hitpoints hitting 0 also trips LOW_HEALTH; DEATH sits at the top of the
+		// logged-in ladder so it must win.
+		assertEquals(AvatarState.DEATH, service.resolveState(false, false));
+	}
+
+	@Test
+	public void levelUpResolvesAboveAfkButBelowLowVitals()
+	{
+		PlayerActivityService service = new PlayerActivityService();
+		service.setLoggedIn(true);
+		service.setLevelUp(true);
+
+		// The flourish interrupts ordinary activity (here AFK).
+		assertEquals(AvatarState.LEVEL_UP, service.resolveState(true, true));
+
+		// ...but a low-vitals warning still outranks it.
+		service.setLowPrayer(true);
+		assertEquals(AvatarState.LOW_PRAYER, service.resolveState(true, true));
+	}
+
+	@Test
+	public void resetClearsDeathAndLevelUp()
+	{
+		PlayerActivityService service = new PlayerActivityService();
+		service.setLoggedIn(true);
+		service.setDead(true);
+		service.setLevelUp(true);
+		service.reset();
+		service.setLoggedIn(true);
+
+		assertEquals(AvatarState.PLAYER_ACTIVE, service.resolveState(false, false));
+	}
+
+	@Test
 	public void resetClearsNewFlags()
 	{
 		PlayerActivityService service = new PlayerActivityService();

@@ -26,6 +26,10 @@ import javax.imageio.ImageIO;
  *       variant is never discovered.</li>
  *   <li><b>Dangling weight</b> - a {@code weights.json} key pointing at a sheet
  *       that is not in the folder.</li>
+ *   <li><b>Unreferenced sheet</b> - (only when a vocabulary of known asset bases
+ *       is supplied) a primary {@code .png} whose base maps to no avatar state,
+ *       skill, or discoverable variant, so the loader never asks for it. Catches
+ *       typos like {@code theiving_loop.png}.</li>
  * </ul>
  *
  * <p>Pure and dependency-light (java.awt + ImageIO only) so it can be unit tested
@@ -48,6 +52,24 @@ public final class AvatarAssetValidator
 	 *         absent - there is nothing to validate)
 	 */
 	public static List<String> validate(File dir)
+	{
+		return validate(dir, null);
+	}
+
+	/**
+	 * As {@link #validate(File)}, but also reports <b>unreferenced sheets</b> when a
+	 * vocabulary of valid primary base names is supplied. A primary {@code .png}
+	 * whose base is not in {@code referencedBases} (and is not a variant of a sheet
+	 * present in the folder) maps to no state/skill/variant, so the loader never
+	 * asks for it - usually a typo (e.g. {@code theiving_loop.png}).
+	 *
+	 * @param dir the avatar folder to validate
+	 * @param referencedBases every base the loader can resolve (e.g. {@code idle_loop},
+	 *        {@code fishing_loop}, {@code combat}, plus their bare/{@code _loop} forms);
+	 *        {@code null} skips the unreferenced-sheet check entirely
+	 * @return a list of human-readable issues; empty means clean
+	 */
+	public static List<String> validate(File dir, Set<String> referencedBases)
 	{
 		List<String> issues = new ArrayList<>();
 		if (dir == null || !dir.isDirectory())
@@ -81,8 +103,37 @@ public final class AvatarAssetValidator
 			}
 		}
 
+		if (referencedBases != null)
+		{
+			for (String base : bases)
+			{
+				checkUnreferenced(base, bases, referencedBases, issues);
+			}
+		}
+
 		checkWeights(new File(dir, "weights.json"), bases, issues);
 		return issues;
+	}
+
+	/**
+	 * Flag {@code base} when it is a primary sheet the loader can never resolve. A
+	 * sheet is fine if its base is a known reference, or if it is a variant of a
+	 * primary that exists in the folder (that primary carries the reference and is
+	 * checked on its own; a variant whose primary is absent is already reported by
+	 * the orphaned-variant check).
+	 */
+	private static void checkUnreferenced(String base, Set<String> bases, Set<String> referencedBases, List<String> issues)
+	{
+		if (referencedBases.contains(base))
+		{
+			return;
+		}
+		Matcher matcher = VARIANT_SUFFIX.matcher(base);
+		if (matcher.matches() && bases.contains(matcher.group(1)))
+		{
+			return;
+		}
+		issues.add("Unreferenced sheet: " + base + ".png maps to no known state, skill, or variant");
 	}
 
 	private static void checkDimensions(File file, List<String> issues)

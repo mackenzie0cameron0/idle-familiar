@@ -3,7 +3,10 @@ package com.idlefamiliar;
 import com.google.inject.Provides;
 import java.awt.image.BufferedImage;
 import java.io.File;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 import javax.inject.Inject;
 import net.runelite.api.Actor;
 import net.runelite.api.ChatMessageType;
@@ -414,7 +417,7 @@ public class IdleFamiliarPlugin extends Plugin
 	/** Validate the drop-in animation folder and report any issues to chat and the log. */
 	private void handleValidateAnimations()
 	{
-		List<String> issues = AvatarAssetValidator.validate(externalAvatarDir);
+		List<String> issues = AvatarAssetValidator.validate(externalAvatarDir, knownAssetBases());
 		if (issues.isEmpty())
 		{
 			log.debug("Idle Familiar animation validation: no issues");
@@ -443,6 +446,37 @@ public class IdleFamiliarPlugin extends Plugin
 				client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", message, null);
 			}
 		});
+	}
+
+	/**
+	 * Every primary base name the loader can resolve - one per avatar state, the
+	 * combat sub-styles, and one per skill - in both the bare and {@code _loop} forms
+	 * {@link AnimationController} accepts. Lets "Validate animations" flag drop-in
+	 * sheets that map to nothing (typos / orphans).
+	 */
+	private Set<String> knownAssetBases()
+	{
+		Set<String> bases = new HashSet<>();
+		for (AvatarState state : AvatarState.values())
+		{
+			addBase(bases, animationController.resolveAssetName(state, ""));
+		}
+		for (String style : new String[]{"melee", "ranged", "magic"})
+		{
+			addBase(bases, "combat_" + style);
+		}
+		for (Skill skill : Skill.values())
+		{
+			addBase(bases, skill.name().toLowerCase(Locale.ROOT).replace(' ', '_'));
+		}
+		return bases;
+	}
+
+	/** Add both the bare and {@code _loop} forms of an asset key, as the loader accepts either. */
+	private static void addBase(Set<String> bases, String key)
+	{
+		bases.add(key);
+		bases.add(key + "_loop");
 	}
 
 	private void applySoundConfig()

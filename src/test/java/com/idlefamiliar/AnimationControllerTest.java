@@ -25,13 +25,35 @@ public class AnimationControllerTest
 	}
 
 	@Test
+	public void mapsCombatSubStylesToAssetKeys()
+	{
+		AnimationController controller = new AnimationController();
+
+		assertEquals("combat", controller.resolveAssetName(AvatarState.COMBAT, ""));
+		assertEquals("combat_melee", controller.resolveAssetName(AvatarState.COMBAT, "melee"));
+		assertEquals("combat_ranged", controller.resolveAssetName(AvatarState.COMBAT, "ranged"));
+		assertEquals("combat_magic", controller.resolveAssetName(AvatarState.COMBAT, "magic"));
+	}
+
+	@Test
+	public void derivesSkillingAssetKeyFromLabel()
+	{
+		AnimationController controller = new AnimationController();
+
+		assertEquals("fishing_loop", controller.resolveAssetName(AvatarState.SKILLING, "Fishing"));
+		// An empty or generic label collapses to the generic skilling key.
+		assertEquals("skilling", controller.resolveAssetName(AvatarState.SKILLING, ""));
+		assertEquals("skilling", controller.resolveAssetName(AvatarState.SKILLING, "Skilling"));
+	}
+
+	@Test
 	public void newStatesWithoutSheetsFallBackToIdle()
 	{
 		AnimationController controller = new AnimationController();
 		controller.loadDefaultAnimations();
 
-		// No walking sheet is bundled, so the frame must still render (idle fallback).
-		assertNotNull(controller.getFrame(AvatarState.WALKING));
+		// No grand_exchange sheet is bundled, so the frame must still render (idle fallback).
+		assertNotNull(controller.getFrame(AvatarState.GRAND_EXCHANGE));
 	}
 
 	@Test
@@ -50,7 +72,7 @@ public class AnimationControllerTest
 		controller.setExternalAssetDir(dir);
 		controller.loadDefaultAnimations();
 
-		// The external walking sheet must win over the idle fallback.
+		// The external walking sheet must win over the bundled walking sheet.
 		BufferedImage frame = controller.getFrame(AvatarState.WALKING, "");
 		assertEquals(Color.RED.getRGB(), frame.getRGB(0, 0));
 	}
@@ -64,7 +86,8 @@ public class AnimationControllerTest
 		graphics.setColor(Color.GREEN);
 		graphics.fillRect(0, 0, 64, 64);
 		graphics.dispose();
-		// "combat" is bundled (combat_loop.png); the external file must take priority.
+		// A combat_loop.png dropped into the external folder must be used for COMBAT
+		// (combat is not bundled, so this also overrides the idle fallback).
 		ImageIO.write(sheet, "png", new File(dir, "combat_loop.png"));
 
 		AnimationController controller = new AnimationController();

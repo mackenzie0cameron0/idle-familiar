@@ -23,10 +23,19 @@ public class AnimationControllerOneShotTest
 	/** Write a synthetic 4-frame (256x64) teleporting sheet into a temp drop-in dir. */
 	private File externalDirWithTeleportSheet() throws IOException
 	{
+		return externalDirWithSheets("teleporting.png");
+	}
+
+	/** Write synthetic 4-frame (256x64) sheets with the given names into a temp drop-in dir. */
+	private File externalDirWithSheets(String... fileNames) throws IOException
+	{
 		File dir = Files.createTempDirectory("if-oneshot").toFile();
 		dir.deleteOnExit();
 		BufferedImage sheet = new BufferedImage(256, 64, BufferedImage.TYPE_INT_ARGB);
-		ImageIO.write(sheet, "png", new File(dir, "teleporting.png"));
+		for (String fileName : fileNames)
+		{
+			ImageIO.write(sheet, "png", new File(dir, fileName));
+		}
 		return dir;
 	}
 
@@ -78,5 +87,47 @@ public class AnimationControllerOneShotTest
 		assertNull(controller.activeOneShotKey());
 		controller.getFrameAt(AvatarState.SKILLING, "Fishing", 3_000_100L);
 		assertNull(controller.activeOneShotKey());
+	}
+
+	@Test
+	public void agilityObstacleLatchesAsAOneShot() throws IOException
+	{
+		AnimationController controller = new AnimationController(new Random(1));
+		controller.setExternalAssetDir(externalDirWithSheets("agility_loop.png"));
+		controller.loadDefaultAnimations();
+		controller.setPlayFullCycleOneShots(true);
+
+		long t = 1_000_000L;
+
+		// Agility is XP-detected and surfaces as SKILLING "Agility" -> asset key
+		// agility_loop, a one-shot. It must latch so the obstacle plays its full cycle
+		// even though the player is already walking again before it would end.
+		assertNotNull(controller.getFrameAt(AvatarState.SKILLING, "Agility", t));
+		assertEquals("agility_loop", controller.activeOneShotKey());
+
+		controller.getFrameAt(AvatarState.WALKING, "", t + 100);
+		assertEquals("agility_loop", controller.activeOneShotKey());
+
+		controller.getFrameAt(AvatarState.WALKING, "", t + 100_000);
+		assertNull(controller.activeOneShotKey());
+	}
+
+	@Test
+	public void grandExchangeAndLevelUpLatchAsOneShots() throws IOException
+	{
+		AnimationController controller = new AnimationController(new Random(1));
+		controller.setExternalAssetDir(externalDirWithSheets("grand_exchange.png", "level_up.png"));
+		controller.loadDefaultAnimations();
+		controller.setPlayFullCycleOneShots(true);
+
+		// A filled GE offer latches its one-shot.
+		assertNotNull(controller.getFrameAt(AvatarState.GRAND_EXCHANGE, "", 5_000_000L));
+		assertEquals("grand_exchange", controller.activeOneShotKey());
+
+		// Let it finish, then a real level-up latches its own one-shot.
+		controller.getFrameAt(AvatarState.PLAYER_IDLE, "", 5_100_000L);
+		assertNull(controller.activeOneShotKey());
+		assertNotNull(controller.getFrameAt(AvatarState.LEVEL_UP, "", 5_200_000L));
+		assertEquals("level_up", controller.activeOneShotKey());
 	}
 }
