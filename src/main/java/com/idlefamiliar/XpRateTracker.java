@@ -7,10 +7,13 @@ import java.util.Map;
  * Tracks per-skill XP/hour for the current login session.
  *
  * <p>The first time a skill is seen after a {@link #reset()} (i.e. at login,
- * when RuneLite syncs every stat), its total XP and the wall-clock time become
- * the session baseline. The rate is then simply the XP gained since that
- * baseline divided by the elapsed hours — a stable "since login" figure, as
- * opposed to a decaying rolling average.
+ * when RuneLite syncs every stat), its total XP becomes the session baseline.
+ * The rate clock, however, does not start until the <em>first actual XP gain</em>
+ * in that skill — so the figure reflects time spent training, not time since
+ * login. (Anchoring at login would divide by the idle time before training and
+ * report a rate well below RuneLite's XP Tracker.) The rate is then the XP gained
+ * since the baseline divided by the elapsed hours since training began — a stable
+ * "since you started" figure, not a decaying rolling average.
  *
  * <p>The class is free of RuneLite and Swing dependencies (time is passed in)
  * so it can be unit tested in isolation.
@@ -29,9 +32,11 @@ public class XpRateTracker
 	/** Per-skill baseline + latest reading. */
 	private static final class Entry
 	{
-		private final long startXp;
-		private final long startMillis;
+		private long startXp;
+		private long startMillis;
 		private long currentXp;
+		/** False until the first XP gain; while false the baseline tracks the latest reading. */
+		private boolean started;
 
 		private Entry(long startXp, long startMillis)
 		{
@@ -60,7 +65,28 @@ public class XpRateTracker
 			bySkill.put(skill, new Entry(totalXp, nowMillis));
 			return;
 		}
-		entry.currentXp = totalXp;
+		if (entry.started)
+		{
+			entry.currentXp = totalXp;
+			return;
+		}
+		if (totalXp > entry.startXp)
+		{
+			// First gain since the (login) baseline: start the clock here so the rate
+			// counts training time, not time since login. The earned XP is measured
+			// from the baseline; the elapsed time runs from this first gain.
+			entry.started = true;
+			entry.startMillis = nowMillis;
+			entry.currentXp = totalXp;
+		}
+		else
+		{
+			// No gain yet (the login stat-sync, or an XP correction): keep the baseline
+			// current so idle time before training is never counted against the rate.
+			entry.startXp = totalXp;
+			entry.startMillis = nowMillis;
+			entry.currentXp = totalXp;
+		}
 	}
 
 	/**

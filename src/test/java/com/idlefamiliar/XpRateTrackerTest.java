@@ -13,12 +13,31 @@ public class XpRateTrackerTest
 	public void computesRateFromGainOverElapsedTime()
 	{
 		XpRateTracker tracker = new XpRateTracker();
-		// Baseline at login: 1,000,000 total XP at t=0.
+		// Login stat-sync baseline an hour before any training begins.
 		tracker.record("Fishing", 1_000_000L, 0);
-		// Half an hour later: 50,000 XP gained -> 100,000/hr.
-		tracker.record("Fishing", 1_050_000L, HOUR / 2);
+		// First XP gain (training starts) at t=HOUR -> the rate clock starts here.
+		tracker.record("Fishing", 1_000_500L, HOUR);
+		// Another half hour of training, for +50,000 total since the baseline.
+		tracker.record("Fishing", 1_050_000L, HOUR + HOUR / 2);
 
-		assertEquals(100_000L, tracker.ratePerHour("Fishing", HOUR / 2));
+		// 50,000 XP over the half hour SINCE training began = 100,000/hr. If it
+		// wrongly counted from login (1.5h) it would report ~33,333/hr.
+		assertEquals(100_000L, tracker.ratePerHour("Fishing", HOUR + HOUR / 2));
+	}
+
+	@Test
+	public void rateAnchorsAtFirstGainNotLogin()
+	{
+		XpRateTracker tracker = new XpRateTracker();
+		// Logged in with this XP, then idle for a full hour (no XP events fire).
+		tracker.record("Woodcutting", 500_000L, 0);
+		// Training starts: first gain at t=HOUR, then 30 min of cutting for +30,000.
+		tracker.record("Woodcutting", 500_001L, HOUR);
+		tracker.record("Woodcutting", 530_000L, HOUR + HOUR / 2);
+
+		// Elapsed is measured from the first gain (0.5h), not from login (1.5h):
+		// 30,000 / 0.5h = 60,000/hr, not 30,000 / 1.5h = 20,000/hr.
+		assertEquals(60_000L, tracker.ratePerHour("Woodcutting", HOUR + HOUR / 2));
 	}
 
 	@Test
@@ -52,6 +71,7 @@ public class XpRateTrackerTest
 	{
 		XpRateTracker tracker = new XpRateTracker();
 		tracker.record("Fishing", 1_000_000L, 0);
+		tracker.record("Fishing", 1_000_001L, 0);   // first gain anchors the clock at t=0
 		tracker.record("Fishing", 1_100_000L, HOUR);
 		assertTrue(tracker.ratePerHour("Fishing", HOUR) > 0);
 
