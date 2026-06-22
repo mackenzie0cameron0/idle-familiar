@@ -1,0 +1,10 @@
+{
+  "idle_loop": 50,
+  "idle_loop_uncommon": 6,
+  "idle_loop_2": 12,
+  "idle_loop_3": 12,
+  "idle_loop_4": 12,
+  "idle_loop_5": 12,
+  "idle_loop_6": 12,
+  "idle_loop_7": 12
+}
