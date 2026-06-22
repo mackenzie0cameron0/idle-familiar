@@ -295,10 +295,15 @@ public class DesktopPetWindow
 			float alpha = clampAlpha(config != null ? config.avatarOpacityPercent() / 100.0f : 1.0f);
 			FontMetrics metrics = g.getFontMetrics();
 
+			// One coherent, client-thread-built view of the plugin state to paint from
+			// (vitals, label, icon, message), so a paint never mixes values from
+			// different ticks. The live animation frame is still pulled separately below.
+			WidgetSnapshot snapshot = plugin != null ? plugin.getWidgetSnapshot() : null;
+
 			// The active skill icon rides in the XP/h panel row so it stays visible even
 			// when the avatar is collapsed (the panel is drawn in both states).
-			BufferedImage skillIcon = (config != null && config.showSkillIcon() && plugin != null)
-				? plugin.getConfirmedSkillIcon() : null;
+			BufferedImage skillIcon = (config != null && config.showSkillIcon() && snapshot != null)
+				? snapshot.getSkillIcon() : null;
 
 			// Avatar is hidden while collapsed; the info panel is drawn in both states.
 			BufferedImage frame = (!collapsed && plugin != null) ? plugin.getCurrentFrame() : null;
@@ -312,24 +317,24 @@ public class DesktopPetWindow
 			}
 
 			// Build the info-panel rows (label, value) honouring the per-stat toggles.
-			boolean loggedInish = plugin != null && plugin.getMaxHitpoints() > 0;
+			boolean loggedInish = snapshot != null && snapshot.getMaxHitpoints() > 0;
 			String[][] rows = new String[5][];
 			int rowCount = 0;
 			if (loggedInish && config.showHpOrb())
 			{
-				rows[rowCount++] = new String[]{"HP", plugin.getCurrentHitpoints() + "/" + plugin.getMaxHitpoints()};
+				rows[rowCount++] = new String[]{"HP", snapshot.getHitpoints() + "/" + snapshot.getMaxHitpoints()};
 			}
 			if (loggedInish && config.showPrayerOrb())
 			{
-				rows[rowCount++] = new String[]{"Pray", plugin.getCurrentPrayer() + "/" + plugin.getMaxPrayer()};
+				rows[rowCount++] = new String[]{"Pray", snapshot.getPrayer() + "/" + snapshot.getMaxPrayer()};
 			}
 			if (loggedInish && config.showInventoryCount())
 			{
-				rows[rowCount++] = new String[]{"Inv", plugin.getInventoryCount() + "/28"};
+				rows[rowCount++] = new String[]{"Inv", snapshot.getInventoryCount() + "/28"};
 			}
 			if (config.showAdvancedInfo())
 			{
-				String xpHr = plugin != null ? plugin.getAdvancedInfoText() : null;
+				String xpHr = snapshot != null ? snapshot.getXpHr() : null;
 				rows[rowCount++] = new String[]{"XP/h", xpHr != null ? xpHr : "-"};
 			}
 
@@ -346,7 +351,7 @@ public class DesktopPetWindow
 			int panelHeight = hasPanel ? rowCount * PANEL_ROW_HEIGHT + PANEL_PADDING * 2 : 0;
 
 			// Optional status text under the avatar (only meaningful when expanded).
-			String message = (!collapsed && config.showSpeechBubble() && plugin != null) ? plugin.getCurrentMessage() : null;
+			String message = (!collapsed && config.showSpeechBubble() && snapshot != null) ? snapshot.getMessage() : null;
 			boolean hasText = message != null && !message.isEmpty();
 			int textWidth = hasText ? metrics.stringWidth(message) + TEXT_PADDING_X * 2 : 0;
 			int textHeight = hasText ? TEXT_ROW_HEIGHT : 0;

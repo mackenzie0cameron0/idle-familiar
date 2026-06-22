@@ -123,11 +123,11 @@ public class IdleFamiliarPlugin extends Plugin
 	private final XpRateTracker xpRateTracker = new XpRateTracker();
 	private DesktopPetWindow desktopPetWindow;
 
-	/** Cached XP/hr text (Xp Tracker service when present, else internal), refreshed on the client thread. */
-	private volatile String cachedXpHr;
+	/** Cached XP/hr text (Xp Tracker service when present, else internal), refreshed on the client thread and published via {@link #widgetSnapshot}. */
+	private String cachedXpHr;
 
-	/** Volatile: written on the client thread, read by the desktop widget on the Swing EDT. */
-	private volatile AvatarState currentAvatarState = AvatarState.LOGGED_OUT;
+	/** Written and read on the client thread; published to the widget via {@link #widgetSnapshot}. */
+	private AvatarState currentAvatarState = AvatarState.LOGGED_OUT;
 	private WorldPoint lastPlayerLocation;
 	private int combatTicksRemaining;
 	/** Counts down the TELEPORTING state after a teleport animation; 0 = not teleporting. */
@@ -145,8 +145,8 @@ public class IdleFamiliarPlugin extends Plugin
 	/** Whether the player changed tile this tick — gates per-tick skilling detection. */
 	private boolean movedThisTick;
 
-	/** Combat sub-style ("melee"/"ranged"/"magic") from the latest combat XP, for combat_&lt;style&gt; sheets. Volatile: read by the widget EDT. */
-	private volatile String combatStyle;
+	/** Combat sub-style ("melee"/"ranged"/"magic") from the latest combat XP, for combat_&lt;style&gt; sheets. Client thread only; reaches the widget via {@link #widgetSnapshot}. */
+	private String combatStyle;
 	/** Last observed boosted hitpoints, for death-edge detection (HP &gt; 0 then 0). */
 	private int lastHitpoints = -1;
 	/** Last real skill levels, to fire a level-up flourish only on a genuine increase. */
@@ -156,20 +156,26 @@ public class IdleFamiliarPlugin extends Plugin
 
 	/**
 	 * Cached skill-icon sprite for the confirmed skill, refreshed on the client
-	 * thread each game tick. Read by the desktop widget, which paints on the Swing
-	 * EDT, so it must never be fetched during paint —
-	 * {@link net.runelite.client.game.SpriteManager#getSprite} requires the
-	 * client thread and throws off it, which would abort the widget's paint.
-	 * Volatile for safe cross-thread reads.
+	 * thread each game tick and copied into {@link #widgetSnapshot}. The
+	 * {@link net.runelite.client.game.SpriteManager#getSprite} fetch must stay on the
+	 * client thread (it throws off it), which is why the icon is cached here for the
+	 * widget instead of being fetched during the widget's EDT paint.
 	 */
-	private volatile BufferedImage confirmedSkillIcon;
-	/** Cached vitals (client thread → widget EDT) for the desktop HP/prayer orbs. */
-	private volatile int cachedHitpoints;
-	private volatile int cachedMaxHitpoints;
-	private volatile int cachedPrayer;
-	private volatile int cachedMaxPrayer;
-	/** Cached occupied inventory slot count (client thread → widget EDT). */
-	private volatile int cachedInventoryCount;
+	private BufferedImage confirmedSkillIcon;
+	/** Cached vitals (client thread); published to the widget via {@link #widgetSnapshot}. */
+	private int cachedHitpoints;
+	private int cachedMaxHitpoints;
+	private int cachedPrayer;
+	private int cachedMaxPrayer;
+	/** Cached occupied inventory slot count (client thread); published via {@link #widgetSnapshot}. */
+	private int cachedInventoryCount;
+	/**
+	 * The latest immutable view the desktop widget paints from, rebuilt on the client
+	 * thread each tick. The widget reads this single volatile reference instead of
+	 * reaching across the thread boundary for each field, so a paint always sees a
+	 * coherent set of values captured at the same instant.
+	 */
+	private volatile WidgetSnapshot widgetSnapshot = WidgetSnapshot.loggedOut();
 	/** Whether the inventory was full on the previous update, for rising-edge detection. */
 	private boolean inventoryWasFull;
 	private boolean lowHitpointsWasActive;
@@ -275,6 +281,7 @@ public class IdleFamiliarPlugin extends Plugin
 			lowPrayerWasActive = false;
 			soundCueGate.reset();
 			handleAvatarStateTransition(AvatarState.LOGGED_OUT);
+			publishWidgetSnapshot();
 			return;
 		}
 
@@ -289,6 +296,7 @@ public class IdleFamiliarPlugin extends Plugin
 		resolveCurrentState();
 		updateConfirmedSkillIcon();
 		updateXpHr();
+		publishWidgetSnapshot();
 		logDebugState(localPlayer);
 	}
 
@@ -676,27 +684,43 @@ public class IdleFamiliarPlugin extends Plugin
 			return animationController.getFrame(preview.state(), preview.label());
 		}
 
-		// Combat picks a style sub-sheet (melee/ranged/magic); every other state uses
-		// the normal activity label (the skill name while skilling).
-		String label = currentAvatarState == AvatarState.COMBAT
+		// Frame state/label come from the per-tick widget snapshot so the rendered
+		// frame stays consistent with the rest of the widget's painted values.
+		WidgetSnapshot snapshot = widgetSnapshot;
+		return animationController.getFrame(snapshot.getState(), snapshot.getAnimationLabel());
+	}
+
+	/** @return the latest widget snapshot (never null); see {@link #publishWidgetSnapshot()}. */
+	WidgetSnapshot getWidgetSnapshot()
+	{
+		return widgetSnapshot;
+	}
+
+	/**
+	 * Assemble and publish the immutable {@link WidgetSnapshot} the desktop widget
+	 * paints from. Called on the client thread at the end of each tick, so the widget
+	 * (Swing EDT) reads one coherent set of values instead of racing each field. The
+	 * animation frame itself is still pulled live in {@link #getCurrentFrame()} because
+	 * it advances on the 100ms repaint timer, not the game tick.
+	 */
+	private void publishWidgetSnapshot()
+	{
+		String animationLabel = currentAvatarState == AvatarState.COMBAT
 			? (combatStyle == null ? "" : combatStyle)
 			: activityService.getActivityLabel();
-		return animationController.getFrame(currentAvatarState, label);
-	}
-
-	AvatarState getCurrentAvatarState()
-	{
-		return currentAvatarState;
-	}
-
-	ActivityType getCurrentActivityType()
-	{
-		return activityService.getCurrentActivity();
-	}
-
-	String getCurrentMessage()
-	{
-		return notificationController.getMessage(currentAvatarState, activityService.getCurrentActivity(), activityService.getActivityLabel());
+		String message = notificationController.getMessage(
+			currentAvatarState, activityService.getCurrentActivity(), activityService.getActivityLabel());
+		widgetSnapshot = new WidgetSnapshot(
+			currentAvatarState,
+			animationLabel,
+			cachedHitpoints,
+			cachedMaxHitpoints,
+			cachedPrayer,
+			cachedMaxPrayer,
+			cachedInventoryCount,
+			cachedXpHr,
+			message,
+			confirmedSkillIcon);
 	}
 
 	private void updateMovement(Player localPlayer)
@@ -804,30 +828,6 @@ public class IdleFamiliarPlugin extends Plugin
 		cachedMaxPrayer = client.getRealSkillLevel(Skill.PRAYER);
 	}
 
-	/** @return current (boosted) hitpoints, cached for off-thread widget paint. */
-	int getCurrentHitpoints()
-	{
-		return cachedHitpoints;
-	}
-
-	/** @return maximum (real-level) hitpoints, or 0 if unknown. */
-	int getMaxHitpoints()
-	{
-		return cachedMaxHitpoints;
-	}
-
-	/** @return current (boosted) prayer points, cached for off-thread widget paint. */
-	int getCurrentPrayer()
-	{
-		return cachedPrayer;
-	}
-
-	/** @return maximum (real-level) prayer, or 0 if unknown. */
-	int getMaxPrayer()
-	{
-		return cachedMaxPrayer;
-	}
-
 	private void updateInventoryFull()
 	{
 		updateInventoryFull(client.getItemContainer(InventoryID.INVENTORY));
@@ -872,12 +872,6 @@ public class IdleFamiliarPlugin extends Plugin
 		inventoryWasFull = reactFull;
 
 		activityService.setInventoryFull(reactFull);
-	}
-
-	/** @return the number of occupied inventory slots (0–28), cached for the widget. */
-	int getInventoryCount()
-	{
-		return cachedInventoryCount;
 	}
 
 	private void updateLingeringActivity(Player localPlayer)
@@ -1116,29 +1110,6 @@ public class IdleFamiliarPlugin extends Plugin
 	private int skillingLingerTicks()
 	{
 		return Math.max(1, Math.min(MAX_SKILLING_LINGER_TICKS, config.skillingLingerTicks()));
-	}
-
-	/**
-	 * @return the cached skill-icon sprite for the currently confirmed skill, or
-	 *         {@code null} if not skilling, the skill is unmapped, or the sprite
-	 *         has not finished loading. Safe to call from any thread (including
-	 *         the desktop widget's Swing EDT) because it only reads a cached
-	 *         image — see {@link #updateConfirmedSkillIcon()}.
-	 */
-	BufferedImage getConfirmedSkillIcon()
-	{
-		return confirmedSkillIcon;
-	}
-
-	/**
-	 * @return a compact "92.4k/hr" XP-rate string for the currently confirmed
-	 *         skill, or {@code null} if nothing is being skilled right now. Backs
-	 *         the desktop widget's advanced-info panel; the matching skill icon
-	 *         comes from {@link #getConfirmedSkillIcon()}.
-	 */
-	String getAdvancedInfoText()
-	{
-		return cachedXpHr;
 	}
 
 	/**

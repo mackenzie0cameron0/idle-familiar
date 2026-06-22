@@ -17,8 +17,8 @@ public class PlayerActivityService
 	private boolean dead;
 	private boolean levelUp;
 	private boolean customEvent;
-	/** Volatile: written on the client thread, read by the desktop widget on the Swing EDT. */
-	private volatile String activityLabel = "";
+	/** Written and read on the client thread; it reaches the widget only via the plugin's widget snapshot. */
+	private String activityLabel = "";
 
 	public void reset()
 	{
