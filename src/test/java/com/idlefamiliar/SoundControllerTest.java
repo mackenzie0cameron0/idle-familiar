@@ -2,6 +2,7 @@ package com.idlefamiliar;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import java.io.BufferedInputStream;
@@ -49,7 +50,8 @@ public class SoundControllerTest
 		assertEquals(SoundEffect.PRAYER_CHIME, controller.soundForAnimationStart(AvatarState.PLAYER_IDLE));
 		assertEquals(SoundEffect.INVENTORY_POP, controller.soundForAnimationStart(AvatarState.SKILLING));
 		assertEquals(SoundEffect.FROG_CROAK, controller.soundForAnimationStart(AvatarState.AFK_WARNING));
-		assertEquals(SoundEffect.PRAYER_CHIME, controller.soundForAnimationStart(AvatarState.TELEPORTING));
+		// Teleporting is intentionally silent (no placeholder cue).
+		assertNull(controller.soundForAnimationStart(AvatarState.TELEPORTING));
 		assertEquals(SoundEffect.INVENTORY_POP, controller.soundForAnimationEnd(AvatarState.SKILLING));
 	}
 

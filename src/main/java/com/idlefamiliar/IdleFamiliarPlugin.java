@@ -532,11 +532,11 @@ public class IdleFamiliarPlugin extends Plugin
 		activityRegistry.getActivityForAnimation(animId).ifPresent(this::markSkillingSignal);
 
 		// A teleport is a committed action; surface it briefly via its own state.
+		// (Intentionally silent — teleports are frequent, so no sound cue is played.)
 		if (activityRegistry.isTeleportAnimation(animId))
 		{
 			teleportTicksRemaining = TELEPORT_LINGER_TICKS;
 			activityService.setTeleporting(true);
-			playGameSound(GameSoundEvent.TELEPORT);
 		}
 	}
 
@@ -1083,8 +1083,6 @@ public class IdleFamiliarPlugin extends Plugin
 				return animationController.resolveAssetName(AvatarState.LOW_PRAYER, "");
 			case GRAND_EXCHANGE:
 				return animationController.resolveAssetName(AvatarState.GRAND_EXCHANGE, "");
-			case TELEPORT:
-				return animationController.resolveAssetName(AvatarState.TELEPORTING, "");
 			case LEVEL_UP:
 				return animationController.resolveAssetName(AvatarState.LEVEL_UP, "");
 			case DEATH:

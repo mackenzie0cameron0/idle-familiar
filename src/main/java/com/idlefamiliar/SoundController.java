@@ -46,21 +46,18 @@ public class SoundController
 		animationStartSounds.put(AvatarState.COMBAT, SoundEffect.LOW_HP_ALARM);
 		animationStartSounds.put(AvatarState.AFK_WARNING, SoundEffect.FROG_CROAK);
 		animationStartSounds.put(AvatarState.BANKING, SoundEffect.COIN_CHIME);
-		animationStartSounds.put(AvatarState.TELEPORTING, SoundEffect.PRAYER_CHIME);
 		animationStartSounds.put(AvatarState.GRAND_EXCHANGE, SoundEffect.COIN_CHIME);
 		animationStartSounds.put(AvatarState.LEVEL_UP, SoundEffect.PRAYER_CHIME);
 		animationStartSounds.put(AvatarState.DEATH, SoundEffect.FROG_CROAK);
 
 		animationEndSounds.put(AvatarState.SKILLING, SoundEffect.INVENTORY_POP);
 		animationEndSounds.put(AvatarState.COMBAT, SoundEffect.INVENTORY_POP);
-		animationEndSounds.put(AvatarState.TELEPORTING, SoundEffect.PRAYER_CHIME);
 		animationEndSounds.put(AvatarState.GRAND_EXCHANGE, SoundEffect.COIN_CHIME);
 
 		gameEventSounds.put(GameSoundEvent.INVENTORY_FULL, SoundEffect.INVENTORY_POP);
 		gameEventSounds.put(GameSoundEvent.LOW_HEALTH, SoundEffect.LOW_HP_ALARM);
 		gameEventSounds.put(GameSoundEvent.LOW_PRAYER, SoundEffect.PRAYER_CHIME);
 		gameEventSounds.put(GameSoundEvent.GRAND_EXCHANGE, SoundEffect.COIN_CHIME);
-		gameEventSounds.put(GameSoundEvent.TELEPORT, SoundEffect.PRAYER_CHIME);
 		gameEventSounds.put(GameSoundEvent.LEVEL_UP, SoundEffect.PRAYER_CHIME);
 		gameEventSounds.put(GameSoundEvent.DEATH, SoundEffect.FROG_CROAK);
 		gameEventSounds.put(GameSoundEvent.COMBAT, SoundEffect.LOW_HP_ALARM);

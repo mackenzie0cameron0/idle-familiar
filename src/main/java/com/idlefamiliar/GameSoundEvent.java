@@ -10,7 +10,6 @@ public enum GameSoundEvent
 	LOW_HEALTH,
 	LOW_PRAYER,
 	GRAND_EXCHANGE,
-	TELEPORT,
 	LEVEL_UP,
 	DEATH,
 	COMBAT,
