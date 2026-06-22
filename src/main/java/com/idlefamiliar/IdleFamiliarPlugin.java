@@ -3,9 +3,11 @@ package com.idlefamiliar;
 import com.google.inject.Provides;
 import java.awt.image.BufferedImage;
 import java.io.File;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import javax.inject.Inject;
 import net.runelite.api.Actor;
@@ -153,9 +155,9 @@ public class IdleFamiliarPlugin extends Plugin
 	/** Last observed boosted hitpoints, for death-edge detection (HP &gt; 0 then 0). */
 	private int lastHitpoints = -1;
 	/** Last real skill levels, to fire a level-up flourish only on a genuine increase. */
-	private final java.util.Map<Skill, Integer> lastSkillLevels = new java.util.HashMap<>();
+	private final Map<Skill, Integer> lastSkillLevels = new HashMap<>();
 	/** Last skill XP values, used to distinguish real XP gains from passive stat changes. */
-	private final java.util.Map<Skill, Integer> lastSkillXp = new java.util.HashMap<>();
+	private final Map<Skill, Integer> lastSkillXp = new HashMap<>();
 
 	/**
 	 * Cached skill-icon sprite for the confirmed skill, refreshed on the client

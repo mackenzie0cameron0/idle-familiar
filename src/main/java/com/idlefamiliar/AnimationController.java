@@ -7,6 +7,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.EnumMap;
 import java.util.HashMap;
@@ -62,7 +63,7 @@ public class AnimationController
 	 * longer or shorter replacement animation.
 	 */
 	private static final Set<String> ONE_SHOT_KEYS = Collections.unmodifiableSet(
-		new HashSet<>(java.util.Arrays.asList("teleporting", "grand_exchange", "agility_loop", "level_up")));
+		new HashSet<>(Arrays.asList("teleporting", "grand_exchange", "agility_loop", "level_up")));
 
 	/** When true, {@link #ONE_SHOT_KEYS} animations play one full cycle on entry. */
 	private volatile boolean playFullCycleOneShots = true;
