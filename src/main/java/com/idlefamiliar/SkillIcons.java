@@ -4,8 +4,8 @@ import java.util.Map;
 import net.runelite.api.SpriteID;
 
 /**
- * Maps a confirmed skill name to its RuneLite skill sprite id. Shared by the
- * in-client overlay and the desktop widget so both draw the same skill badge.
+ * Maps a confirmed skill name to its RuneLite skill sprite id, so the desktop
+ * widget can draw the matching skill badge.
  */
 public final class SkillIcons
 {

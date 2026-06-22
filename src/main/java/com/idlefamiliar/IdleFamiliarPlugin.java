@@ -3,8 +3,10 @@ package com.idlefamiliar;
 import com.google.inject.Provides;
 import java.awt.image.BufferedImage;
 import java.io.File;
+import java.util.List;
 import javax.inject.Inject;
 import net.runelite.api.Actor;
+import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
 import net.runelite.api.GameState;
 import net.runelite.api.GrandExchangeOfferState;
@@ -25,6 +27,7 @@ import net.runelite.api.events.StatChanged;
 import net.runelite.api.events.WidgetClosed;
 import net.runelite.api.events.WidgetLoaded;
 import net.runelite.client.RuneLite;
+import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.game.SpriteManager;
@@ -100,6 +103,9 @@ public class IdleFamiliarPlugin extends Plugin
 	private ConfigManager configManager;
 
 	@Inject
+	private ClientThread clientThread;
+
+	@Inject
 	private SpriteManager spriteManager;
 
 	@Inject
@@ -150,8 +156,8 @@ public class IdleFamiliarPlugin extends Plugin
 
 	/**
 	 * Cached skill-icon sprite for the confirmed skill, refreshed on the client
-	 * thread each game tick. Read by the overlay AND the desktop widget (the
-	 * latter paints on the Swing EDT), so it must never be fetched during paint —
+	 * thread each game tick. Read by the desktop widget, which paints on the Swing
+	 * EDT, so it must never be fetched during paint —
 	 * {@link net.runelite.client.game.SpriteManager#getSprite} requires the
 	 * client thread and throws off it, which would abort the widget's paint.
 	 * Volatile for safe cross-thread reads.
@@ -366,11 +372,69 @@ public class IdleFamiliarPlugin extends Plugin
 			return;
 		}
 
+		// The "Reload animations" / "Validate animations" toggles act as buttons: a tick
+		// fires the action once, then resets itself so it can be tapped again. The reset
+		// posts its own (false) ConfigChanged, which falls through harmlessly below.
+		if ("reloadAnimations".equals(event.getKey()) && "true".equals(event.getNewValue()))
+		{
+			configManager.setConfiguration(IdleFamiliarConfig.GROUP, "reloadAnimations", false);
+			handleReloadAnimations();
+			return;
+		}
+		if ("validateAnimations".equals(event.getKey()) && "true".equals(event.getNewValue()))
+		{
+			configManager.setConfiguration(IdleFamiliarConfig.GROUP, "validateAnimations", false);
+			handleValidateAnimations();
+			return;
+		}
+
 		if (desktopPetWindow != null)
 		{
 			desktopPetWindow.refreshVisibility();
 		}
 		applySoundConfig();
+	}
+
+	/** Reload every sheet/weights from disk (drop-in folder included). Safe off the client thread. */
+	private void handleReloadAnimations()
+	{
+		animationController.reloadAnimations();
+		log.debug("Idle Familiar animations reloaded");
+		announce("Idle Familiar: animations reloaded.");
+	}
+
+	/** Validate the drop-in animation folder and report any issues to chat and the log. */
+	private void handleValidateAnimations()
+	{
+		List<String> issues = AvatarAssetValidator.validate(externalAvatarDir);
+		if (issues.isEmpty())
+		{
+			log.debug("Idle Familiar animation validation: no issues");
+			announce("Idle Familiar: animation validation found no issues.");
+			return;
+		}
+		log.warn("Idle Familiar animation validation found {} issue(s):", issues.size());
+		for (String issue : issues)
+		{
+			log.warn("  {}", issue);
+		}
+		announce("Idle Familiar: animation validation found " + issues.size() + " issue(s) (see client log).");
+	}
+
+	/**
+	 * Post a game-chat line on the client thread (config events may arrive on the Swing
+	 * EDT, where the client API is unsafe to touch). Silently does nothing when not
+	 * logged in — the log line above still records the result.
+	 */
+	private void announce(String message)
+	{
+		clientThread.invokeLater(() ->
+		{
+			if (client.getGameState() == GameState.LOGGED_IN)
+			{
+				client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", message, null);
+			}
+		});
 	}
 
 	private void applySoundConfig()
@@ -1028,7 +1092,7 @@ public class IdleFamiliarPlugin extends Plugin
 	/**
 	 * @return the confirmed skill name (e.g. {@code "Fishing"}) while the avatar
 	 *         is in the skilling state, or {@code null} otherwise. Used by the
-	 *         overlay to draw the matching skill icon badge.
+	 *         desktop widget to draw the matching skill icon badge.
 	 */
 	String getConfirmedSkill()
 	{

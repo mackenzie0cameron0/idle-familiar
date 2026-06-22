@@ -506,6 +506,30 @@ public interface IdleFamiliarConfig extends Config
 	}
 
 	@ConfigItem(
+		keyName = "reloadAnimations",
+		name = "Reload animations",
+		description = "Re-read every animation sheet and weights.json from disk (including the drop-in folder) without toggling the plugin off and on. Tick to run; it resets itself.",
+		section = debugSection,
+		position = 2
+	)
+	default boolean reloadAnimations()
+	{
+		return false;
+	}
+
+	@ConfigItem(
+		keyName = "validateAnimations",
+		name = "Validate animations",
+		description = "Check the drop-in animation folder for malformed sheets, orphaned variants and dangling weights, reporting any issues to the game chat (and the client log). Tick to run; it resets itself.",
+		section = debugSection,
+		position = 3
+	)
+	default boolean validateAnimations()
+	{
+		return false;
+	}
+
+	@ConfigItem(
 		keyName = "widgetCollapsed",
 		name = "Widget collapsed",
 		description = "Internal: tracks whether the desktop widget is collapsed to its carrot icon",

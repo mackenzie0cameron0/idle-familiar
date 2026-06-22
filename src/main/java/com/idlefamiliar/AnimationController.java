@@ -77,11 +77,11 @@ public class AnimationController
 
 	/**
 	 * Guards the animation/variant maps against a runtime reload racing a paint.
-	 * {@link #getFrameAt} is called from both the overlay (client thread) and the
-	 * desktop widget (Swing EDT), and {@link #reloadAnimations()} clears/rebuilds
-	 * those same maps from the client thread when the user picks "Reload
-	 * animations". Holding this lock across both keeps a reload from interleaving
-	 * with a paint (the lookups are cheap, so the contention is negligible).
+	 * {@link #getFrameAt} is called from the desktop widget on the Swing EDT, and
+	 * {@link #reloadAnimations()} clears/rebuilds those same maps when the user ticks
+	 * "Reload animations" in the config (which may arrive on the EDT or the client
+	 * thread). Holding this lock across both keeps a reload from interleaving with a
+	 * paint (the lookups are cheap, so the contention is negligible).
 	 */
 	private final Object frameLock = new Object();
 
