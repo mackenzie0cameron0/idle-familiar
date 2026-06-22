@@ -2,8 +2,7 @@
 
 **Date:** 2026-06-17
 **Context:** Idle Familiar is a self-contained RuneLite plugin: an animated avatar
-(in-client overlay + optional always-on-top desktop widget) that reacts to what
-the player is doing. The detection pipeline and the variant/animation system are
+(an always-on-top desktop widget) that reacts to what the player is doing. The detection pipeline and the variant/animation system are
 stable; the near-term focus is filling out the animation library and getting the
 plugin Hub-ready. Nothing below is committed - it's a menu, roughly ordered
 "polish" to "new direction."
@@ -19,8 +18,9 @@ plugin Hub-ready. Nothing below is committed - it's a menu, roughly ordered
 - **State priority ladder** is centralized and documented in
   `PlayerActivityService.resolveState` - reorder the `if` rungs to retune.
 - **Variants:** weighted selection from `weights.json`, re-rolled **every loop**
-  (anchored playback so each loop starts on frame 0), plus a right-click
-  "Reload animations" action that re-reads sheets and weights without a restart.
+  (anchored playback so each loop starts on frame 0), plus a **"Reload animations"**
+  toggle in the Debug config section that re-reads sheets and weights without a
+  restart.
 - **Desktop widget:** side-panel layout (HP / prayer / inventory / XP-hr), honors
   the opacity setting, stays visible when collapsed, and re-asserts always-on-top
   so it survives long sessions.
@@ -64,14 +64,15 @@ desktop-pet touch - distinct from the AFK_warning reaction.
 ## B. Detection & accuracy
 
 ### B1. Broader activity coverage
-States that exist but ship without art (fall back to idle today): `walking`,
-`running`, `teleporting`, `grand_exchange`, `banking`. Plus candidates with no
-state yet: agility courses, prayer-at-altar, bossing phases, questing cutscenes,
-emotes. Each is an art task and sometimes a small detection hook.
+States that exist but ship without art (fall back to idle today): `grand_exchange`,
+`level_up`, and the generic `combat` / `skilling` sheets. Plus candidates with no
+state yet: prayer-at-altar, bossing phases, questing cutscenes, emotes. Each is an
+art task and sometimes a small detection hook.
 
-### B2. Combat sub-states
-Combat is one bucket. The XP-drop label already distinguishes melee / ranged /
-magic, so the avatar could mirror the combat style with three sheets.
+### B2. Combat sub-states ✅ Shipped
+The XP-drop label distinguishes melee / ranged / magic and the renderer resolves
+`combat_<style>` sheets (falling back to the generic `combat`). The remaining work
+is purely art: drawing `combat_melee` / `combat_ranged` / `combat_magic`.
 
 ### B3. Generalized "still engaged" sustain
 Target-based sustain currently only covers Actor interactions (NPCs). Extending
@@ -93,7 +94,7 @@ The bubble shows a fixed line per state. A small randomized pool keyed to
 state + skill ("Nice catch!", "Almost full...") would add character. Keep it
 toggleable and non-spammy.
 
-### C2. Overlay & widget positioning
+### C2. Widget positioning
 Drag-to-place with position remembered per profile, snap-to-corner, optional
 click-through, multi-monitor awareness, and a resize handle. The widget already
 supports dragging; persistence and snapping are the missing polish.
@@ -142,25 +143,26 @@ and has a reference for authoring their own.
 
 ## E. Engineering & release readiness
 
-### E1. Asset validation tooling
-A dev/debug command that scans the avatar folder and reports malformed sheets
-(width not divisible by height), orphaned variants (a `_rare` with no primary),
-and `weights.json` keys pointing at missing files. Pays for itself while the
-library grows.
+### E1. Asset validation tooling ✅ Shipped
+`AvatarAssetValidator` scans the avatar folder and reports malformed sheets (width
+not divisible by height), orphaned variants (a `_rare` with no primary), and
+`weights.json` keys pointing at missing files; it is wired to the **"Validate
+animations"** Debug toggle. Possible extension: also flag *unreferenced* sheets
+(a `.png` whose base maps to no state, skill, or discoverable variant).
 
-### E2. weights.json merge instead of override
-An external `weights.json` currently replaces the bundled one wholesale - drop one
-file in and every bundled weight is lost. A per-key merge (external overrides
-bundled, others retained) would be far less surprising.
+### E2. weights.json merge instead of override ✅ Shipped
+`AnimationController.loadWeightsJson()` now starts from the bundled defaults and
+overlays the external file per key, so dropping in a `weights.json` that tunes only
+`idle` no longer wipes every other bundled weight.
 
 ### E3. Hot-reload of the drop-in folder
 Watch the external folder and reload on change, so artists see edits live without
 even the right-click reload. Builds on the existing reload path.
 
-### E4. Config sectioning & copy pass
-Group the config with `@ConfigSection` (Overlay / Desktop widget / Detection /
-Debug), order items sensibly, and tighten descriptions. Small effort, big
-first-impression win for a public release.
+### E4. Config sectioning & copy pass ✅ Shipped
+The config is grouped with `@ConfigSection` into Avatar / Desktop widget / Warnings
+& reactions / Sounds / Detection / Debug, with ordered items and fuller
+descriptions.
 
 ### E5. Plugin Hub readiness
 README with screenshots/GIFs, plugin metadata and icon, a clean checkstyle pass,
@@ -168,9 +170,9 @@ and unit-test coverage for the changed detection paths. Now that the plugin is
 RuneLite-only with no external network, Hub review should be considerably simpler -
 worth confirming against the current Hub guidelines.
 
-### E6. State-preview / test mode
-A debug control to force-render a chosen avatar state (and variant) so art can be
-iterated without reproducing the in-game condition.
+### E6. State-preview / test mode ✅ Shipped
+The Debug **"Preview animation"** selector (`AvatarPreview`) force-renders a chosen
+state/skill so art can be iterated without reproducing the in-game condition.
 
 ### E7. Animation performance
 Pause or throttle the repaint loop when the client is unfocused or the widget is
@@ -182,9 +184,8 @@ fully occluded, to keep idle CPU/GPU negligible.
 
 1. Finish the core per-skill `_loop` sheets; add `_uncommon`/`_rare` variants to
    the highest-traffic states (idle, common skills) and tune `weights.json`.
-2. **E1 (asset validator)** - immediate payoff while adding art.
-3. **E4 + E5 (config sectioning + Hub prep)** - the plugin is close to releasable
-   now that it's RuneLite-only.
-4. **C2 (overlay/widget position persistence)** - the most-felt UX gap.
-5. **B1 (art for walking/running + banking)** - fills the most common idle
-   fallbacks.
+2. **E5 (Hub prep)** - screenshots/GIFs, metadata + icon, checkstyle, test
+   coverage; the plugin is close to releasable now that it's RuneLite-only.
+3. **C2 (widget position persistence)** - the most-felt UX gap.
+4. **B1 (art for `grand_exchange` / `level_up` and the generic combat/skilling
+   sheets)** - fills the remaining idle fallbacks.

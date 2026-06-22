@@ -8,7 +8,8 @@ is the easy one — no rebuild, no code.**
 ## Option A — External drop-in folder (recommended, no rebuild)
 
 The plugin loads sheets from a folder in your RuneLite home *in preference to*
-the ones baked into the jar. Drop a PNG in, then restart the plugin or RuneLite.
+the ones baked into the jar. Drop a PNG in, then either restart the plugin or tick
+**"Reload animations"** in the plugin's Debug config section to pick it up live.
 
 ### Where
 
@@ -102,9 +103,9 @@ thieving_loop.png  …
 Use the lower-cased skill name. If a skill has no sheet, it uses the generic
 `skilling_loop.png`, then idle.
 
-> Note: `walking`, `running`, `teleporting`, and `grand_exchange` ship **without**
-> sheets, so they currently fall back to `idle` until you add art for them — this
-> is the intended behaviour, not a bug.
+> Note: a few states ship **without** a bundled sheet — `grand_exchange`,
+> `level_up`, and the generic `combat` / `skilling` fallbacks — so they fall back to
+> `idle` until you add art for them. This is the intended behaviour, not a bug.
 
 ---
 

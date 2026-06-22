@@ -48,8 +48,7 @@ feel richer.
   be an exact whole multiple of its height**. Example: a 256px-tall sheet with 6
   frames is `1536 x 256`.
 - **Transparent background** (PNG alpha) is required - the avatar floats on the
-  game overlay and on the desktop with no backdrop. Never bake in a solid
-  background.
+  desktop widget with no backdrop. Never bake in a solid background.
 
 **Resolution**
 
@@ -273,3 +272,94 @@ Minimum viable avatar: `idle_loop.png`. Recommended first pass: idle, active,
 walking, running, combat, skilling, logged_out, inventory_full, low_health,
 low_prayer, afk_warning. Then add per-skill sheets, combat styles, the one-shots
 (teleport / GE / level-up / agility / death), and idle variants.
+
+---
+
+## 7. Plugin states, triggers & asset resolution (reference)
+
+This section documents what the plugin actually asks the loader for, so the
+filenames above line up with real behaviour. It is generated from the source
+(`AvatarState`, `PlayerActivityService.resolveState()`, `AnimationController`).
+
+### 7.1 States in priority order
+
+Every tick `resolveState()` returns the **first** matching state, top to bottom,
+so a lower state only shows when every state above it is inactive. Asset keys map
+to files per section 7.2.
+
+| # | State | Trigger (plain English) | Asset key |
+|---|-------|-------------------------|-----------|
+| 1 | `LOGGED_OUT` | Logged out / on the login screen (overrides everything). | `logged_out` |
+| 2 | `DEATH` | Hitpoints just hit 0. Held briefly, then released. | `death` |
+| 3 | `LOW_HEALTH` | HP at/under **Low HP threshold** (`lowHpThreshold`, default 20). Gated by "Low HP warning". | `low_health` |
+| 4 | `LOW_PRAYER` | Prayer at/under **Low prayer threshold** (`lowPrayerThreshold`, default 10). Gated by "Low prayer warning". | `low_prayer` |
+| 5 | `LEVEL_UP` | A real skill level just increased. Momentary (one-shot). | `level_up` |
+| 6 | `CUSTOM_EVENT` | A configured **chat-message filter** just matched. Brief. | `active` |
+| 7 | `AFK_WARNING` | Idle past **AFK warning threshold** (`afkWarningThresholdTicks`, default 60 ticks ≈ 36 s). | `afk_warning` |
+| 8 | `BANKING` | Bank interface open. Sits above combat so banking is never misread as combat. | `banking` |
+| 9 | `COMBAT` | **Real combat only:** a hitsplat lands on you, or you deal one to your target. Gated by "React to combat". | `combat` (+ style, see 7.2) |
+| 10 | `TELEPORTING` | A recognised teleport animation just played. Momentary (one-shot). | `teleporting` |
+| 11 | `SKILLING` | Training a skill (per-tick animation whitelist; **Skilling linger** `skillingLingerTicks`, default 2, only bridges sub-second gaps). Gated by "React to skilling". | `<skill>_loop` / `skilling` |
+| 12 | `INVENTORY_FULL` | Inventory just became full. Gated by "Inventory full warning". | `inventory_full` |
+| 13 | `GRAND_EXCHANGE` | A GE buy/sell offer just filled. Brief (one-shot); above movement so it surfaces while walking. | `grand_exchange` |
+| 14 | `WALKING` | Moving ~1 tile/tick. | `walking` |
+| 15 | `RUNNING` | Moving ~2 tiles/tick (run enabled). | `running` |
+| 16 | `PLAYER_IDLE` | Logged in but idle past **Idle threshold** (`idleThresholdTicks`, default 15 ticks ≈ 9 s). | `idle` |
+| 17 | `PLAYER_ACTIVE` | Catch-all: logged in, doing something unclassified (bottom of the chain). | `active` |
+
+`DEFAULT` is never returned by `resolveState()`; it is the controller's internal
+fallback bucket and also maps to `idle`. Agility is XP-detected (no clean
+animation namespace) and surfaces as `SKILLING` with the label "Agility", so it
+plays `agility_loop` — which is a **one-shot** (see 7.3).
+
+### 7.2 Asset key → file resolution
+
+For a key, the loader tries, in order, and the first that exists wins:
+
+1. `<key>_loop.png`  ← preferred; this is what you draw
+2. `<key>.png`
+
+If neither exists, the state **falls back to `idle`** (intentional — that is how a
+state with no art behaves). Two special chains:
+
+- **Combat style:** with a known style the key is `combat_<style>`
+  (`combat_melee` / `combat_ranged` / `combat_magic`), which falls back to the
+  generic `combat`, then to `idle`.
+- **Per-skill:** the key is built from the skill label — lower-cased, spaces to
+  underscores, then `_loop` (so Fishing → `fishing_loop`). Fallback chain:
+  `<skill>_loop` → `skilling_<skill>` → generic `skilling` → `idle`.
+
+> **Combat-style skills are XP-driven, not per-skill sheets.** Attack, Strength,
+> Defence, Hitpoints, Ranged and Magic surface through the **COMBAT** state, not a
+> per-skill skilling sheet — do not draw `ranged_loop.png` / `magic_loop.png`.
+
+### 7.3 One-shots
+
+With **"Finish one-shot animations"** on (default), entering `teleporting`,
+`grand_exchange`, `agility_loop`, or `level_up` latches that animation so it plays
+its **full cycle exactly once**, even if the underlying state ends a tick later,
+then hands back. Draw these as a complete wind-up → action → settle gesture (the
+last frame is the resting pose), not a seamless loop. Variants still apply (the
+chosen variant plays through fully).
+
+### 7.4 Variants & weights
+
+Any key can ship multiple sheets; the plugin picks one on entry and **re-rolls each
+time the loop finishes**. Variants are named after the **resolved primary base**
+(`<key>_loop`), so for `idle` they are `idle_loop_2.png` … `idle_loop_9.png`,
+`idle_loop_uncommon.png`, `idle_loop_rare.png` — note the `_loop` segment is
+required (`idle_rare.png` is **not** discovered). Relative odds live in
+`weights.json` in the same folder (unlisted variants default to weight 1); a
+drop-in `weights.json` overrides bundled entries per key.
+
+### 7.5 Where files go
+
+| | Bundled (in the jar) | Drop-in (runtime) |
+|---|---|---|
+| **Path** | `src/main/resources/com/idlefamiliar/avatar/default/` | `<RuneLite home>/idle-familiar/avatar/` |
+| **Rebuild?** | Yes (`./gradlew shadowJar`). | No. |
+| **Use when** | Shipping art with the plugin. | Iterating / personal swaps; a drop-in file overrides the bundled file of the same name. |
+
+The drop-in folder is created on first run. After adding files, toggle the plugin
+off/on or use **"Validate animations" / "Reload animations"** in the Debug config
+section to pick them up — no full client restart needed.

@@ -16,8 +16,8 @@ idle/AFK awareness and a fully swappable animation set.
   AFK warning.
 - Sprite-sheet animations with **weighted random variants** that re-roll every
   loop, so a state can show several different animations (`weights.json`).
-- **One-shot animations** (teleport, Grand Exchange, agility) play their full
-  cycle once even though the underlying state ends immediately.
+- **One-shot animations** (teleport, Grand Exchange, agility, level-up) play their
+  full cycle once even though the underlying state ends immediately.
 - **External drop-in folder** - add or swap animations at runtime with no rebuild
   (see `ADDING_ANIMATIONS.md`).
 - Desktop widget info panel: HP, prayer, inventory count, and XP/hour, opacity-
@@ -50,9 +50,9 @@ relative weights in `weights.json`. Full details and a checklist are in
 Idle Familiar is visual-only. It does not automate gameplay, send clicks or menu
 actions, simulate keyboard or mouse input, path the player, switch prayer or gear,
 or provide any bot logic. It makes **no network connections** - it only reads
-normal RuneLite client state and events to draw an informational overlay, and
-reads/writes PNG and `weights.json` files in its own avatar folder. Sound cues are
-short bundled WAV files played locally by the plugin.
+normal RuneLite client state and events to draw the informational desktop widget,
+and reads/writes PNG and `weights.json` files in its own avatar folder. Sound cues
+are short bundled WAV files played locally by the plugin.
 
 ## Development
 
