@@ -73,6 +73,14 @@ public class DesktopPetWindow
 	/** Whether the widget is collapsed (avatar hidden; the info panel stays visible). */
 	private boolean collapsed;
 
+	/**
+	 * Whether the user has hidden the whole widget via the sidebar toggle. While
+	 * hidden, {@link #refreshVisibility()} keeps it hidden instead of re-showing it.
+	 * Volatile: written from the sidebar button (Swing EDT) and read by
+	 * {@code refreshVisibility} which may be called from the client thread.
+	 */
+	private volatile boolean hidden;
+
 	public DesktopPetWindow(IdleFamiliarPlugin plugin, IdleFamiliarConfig config, ConfigManager configManager)
 	{
 		this(plugin, config, configManager, null);
@@ -166,7 +174,27 @@ public class DesktopPetWindow
 
 	public void refreshVisibility()
 	{
-		show();
+		if (!hidden)
+		{
+			show();
+		}
+	}
+
+	/**
+	 * Toggle the whole widget between shown and hidden. Backs the RuneLite sidebar
+	 * button, giving a way to dismiss the desktop pet without disabling the plugin.
+	 */
+	public void toggleWindowVisibility()
+	{
+		hidden = !hidden;
+		if (hidden)
+		{
+			hide();
+		}
+		else
+		{
+			show();
+		}
 	}
 
 	public boolean isCollapsed()

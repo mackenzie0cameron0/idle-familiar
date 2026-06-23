@@ -39,7 +39,10 @@ import net.runelite.client.game.SpriteManager;
 import net.runelite.client.events.ConfigChanged;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
+import net.runelite.client.ui.ClientToolbar;
 import net.runelite.client.ui.ClientUI;
+import net.runelite.client.ui.NavigationButton;
+import net.runelite.client.util.ImageUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -116,6 +119,9 @@ public class IdleFamiliarPlugin extends Plugin
 	@Inject
 	private ClientUI clientUI;
 
+	@Inject
+	private ClientToolbar clientToolbar;
+
 	private final IdleStateTracker idleStateTracker = new IdleStateTracker();
 	private final PlayerActivityService activityService = new PlayerActivityService();
 	private final AnimationController animationController = new AnimationController();
@@ -127,6 +133,8 @@ public class IdleFamiliarPlugin extends Plugin
 	/** Per-session XP/hr source for the widget readout. (The XP Tracker plugin's service is not injectable from an external plugin.) */
 	private final XpRateTracker xpRateTracker = new XpRateTracker();
 	private DesktopPetWindow desktopPetWindow;
+	/** Sidebar button (Golden Toad icon) that toggles the desktop widget's visibility. */
+	private NavigationButton navButton;
 
 	/** Cached XP/hr text (Xp Tracker service when present, else internal), refreshed on the client thread and published via {@link #widgetSnapshot}. */
 	private String cachedXpHr;
@@ -229,13 +237,34 @@ public class IdleFamiliarPlugin extends Plugin
 		lastSoundActivityLabel = "";
 		soundCueGate.reset();
 		desktopPetWindow.refreshVisibility();
+		addSidebarButton();
 
 		log.debug("Idle Familiar started");
+	}
+
+	/** Add the Golden Toad sidebar button; clicking it toggles the desktop widget. */
+	private void addSidebarButton()
+	{
+		if (navButton != null)
+		{
+			return;
+		}
+		navButton = NavigationButton.builder()
+			.tooltip("Idle Familiar")
+			.icon(ImageUtil.loadImageResource(IdleFamiliarPlugin.class, "/com/idlefamiliar/GoldenToad.png"))
+			.onClick(() -> desktopPetWindow.toggleWindowVisibility())
+			.build();
+		clientToolbar.addNavigation(navButton);
 	}
 
 	@Override
 	protected void shutDown()
 	{
+		if (navButton != null)
+		{
+			clientToolbar.removeNavigation(navButton);
+			navButton = null;
+		}
 		if (desktopPetWindow != null)
 		{
 			desktopPetWindow.hide();
