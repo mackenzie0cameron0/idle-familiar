@@ -39,10 +39,8 @@ import net.runelite.client.game.SpriteManager;
 import net.runelite.client.events.ConfigChanged;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
-import net.runelite.client.ui.ClientToolbar;
+import net.runelite.client.plugins.xptracker.XpTrackerService;
 import net.runelite.client.ui.ClientUI;
-import net.runelite.client.ui.NavigationButton;
-import net.runelite.client.util.ImageUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -119,8 +117,16 @@ public class IdleFamiliarPlugin extends Plugin
 	@Inject
 	private ClientUI clientUI;
 
-	@Inject
-	private ClientToolbar clientToolbar;
+	/**
+	 * RuneLite's built-in XP Tracker service, used as the primary XP/hour source so the
+	 * widget matches the XP Tracker panel exactly. Injected optionally: its binding lives
+	 * in the XP Tracker plugin's injector and may not be reachable from here, in which
+	 * case this stays null and {@link #xpHrFor} falls back to {@link #xpRateTracker}.
+	 * (javax.inject.@Inject has no 'optional', so the Guice annotation is used
+	 * fully-qualified to avoid colliding with the javax import.)
+	 */
+	@com.google.inject.Inject(optional = true)
+	private XpTrackerService xpTrackerService;
 
 	private final IdleStateTracker idleStateTracker = new IdleStateTracker();
 	private final PlayerActivityService activityService = new PlayerActivityService();
@@ -133,8 +139,6 @@ public class IdleFamiliarPlugin extends Plugin
 	/** Per-session XP/hr source for the widget readout. (The XP Tracker plugin's service is not injectable from an external plugin.) */
 	private final XpRateTracker xpRateTracker = new XpRateTracker();
 	private DesktopPetWindow desktopPetWindow;
-	/** Sidebar button (Golden Toad icon) that toggles the desktop widget's visibility. */
-	private NavigationButton navButton;
 
 	/** Cached XP/hr text (Xp Tracker service when present, else internal), refreshed on the client thread and published via {@link #widgetSnapshot}. */
 	private String cachedXpHr;
@@ -237,34 +241,14 @@ public class IdleFamiliarPlugin extends Plugin
 		lastSoundActivityLabel = "";
 		soundCueGate.reset();
 		desktopPetWindow.refreshVisibility();
-		addSidebarButton();
 
-		log.debug("Idle Familiar started");
-	}
-
-	/** Add the Golden Toad sidebar button; clicking it toggles the desktop widget. */
-	private void addSidebarButton()
-	{
-		if (navButton != null)
-		{
-			return;
-		}
-		navButton = NavigationButton.builder()
-			.tooltip("Idle Familiar")
-			.icon(ImageUtil.loadImageResource(IdleFamiliarPlugin.class, "/com/idlefamiliar/GoldenToad.png"))
-			.onClick(() -> desktopPetWindow.toggleWindowVisibility())
-			.build();
-		clientToolbar.addNavigation(navButton);
+		log.debug("Idle Familiar started (XP Tracker service {})",
+			xpTrackerService != null ? "available" : "unavailable - using internal XP/hr");
 	}
 
 	@Override
 	protected void shutDown()
 	{
-		if (navButton != null)
-		{
-			clientToolbar.removeNavigation(navButton);
-			navButton = null;
-		}
 		if (desktopPetWindow != null)
 		{
 			desktopPetWindow.hide();
@@ -1177,17 +1161,50 @@ public class IdleFamiliarPlugin extends Plugin
 
 	/**
 	 * Refresh {@link #cachedXpHr} on the client thread (the widget paints on the EDT)
-	 * with the per-session XP/hr for the confirmed skill, or {@code null} when not
-	 * skilling. (RuneLite's XP Tracker plugin binds its service only in its own
-	 * injector, so an external plugin can't read it; this is the equivalent internal
-	 * calculation.)
+	 * with the XP/hr for the confirmed skill, or {@code null} when not skilling.
+	 * Prefers RuneLite's XP Tracker service so the readout matches the XP Tracker
+	 * panel exactly, falling back to the internal {@link #xpRateTracker} when that
+	 * service is not reachable from this plugin's injector.
 	 */
 	private void updateXpHr()
 	{
 		String skill = getConfirmedSkill();
-		cachedXpHr = skill == null
-			? null
-			: XpRateTracker.formatRate(xpRateTracker.ratePerHour(skill, System.currentTimeMillis()));
+		cachedXpHr = skill == null ? null : XpRateTracker.formatRate(xpHrFor(skill));
+	}
+
+	/**
+	 * XP/hour for {@code skill}: RuneLite's XP Tracker value when its service is
+	 * available and reporting, otherwise the internal session tracker.
+	 */
+	private long xpHrFor(String skill)
+	{
+		Skill resolved = resolveSkill(skill);
+		if (xpTrackerService != null && resolved != null)
+		{
+			int rate = xpTrackerService.getXpHr(resolved);
+			if (rate > 0)
+			{
+				return rate;
+			}
+		}
+		return xpRateTracker.ratePerHour(skill, System.currentTimeMillis());
+	}
+
+	/** Map a skill label (e.g. "Woodcutting") to its {@link Skill}, or {@code null} if unknown. */
+	private static Skill resolveSkill(String name)
+	{
+		if (name == null)
+		{
+			return null;
+		}
+		try
+		{
+			return Skill.valueOf(name.toUpperCase(Locale.ROOT).replace(' ', '_'));
+		}
+		catch (IllegalArgumentException ex)
+		{
+			return null;
+		}
 	}
 
 	/**
