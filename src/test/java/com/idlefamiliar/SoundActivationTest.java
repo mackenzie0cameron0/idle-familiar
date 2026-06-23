@@ -48,8 +48,10 @@ public class SoundActivationTest
 		assertFalse(SoundActivation.gameEvent(config, GameSoundEvent.LOW_PRAYER));
 		assertFalse(SoundActivation.chatMessage(config));
 
-		assertTrue(SoundActivation.animationStart(config, AvatarState.COMBAT));
-		assertTrue(SoundActivation.gameEvent(config, GameSoundEvent.COMBAT));
+		// States/events with no dedicated toggle (combat / level-up / death / ...) are
+		// opt-in and stay silent, rather than falling through to a default-on cue.
+		assertFalse(SoundActivation.animationStart(config, AvatarState.COMBAT));
+		assertFalse(SoundActivation.gameEvent(config, GameSoundEvent.COMBAT));
 	}
 
 	@Test

@@ -36,7 +36,9 @@ final class SoundActivation
 			case LOW_PRAYER:
 				return config.lowPrayerSounds();
 			default:
-				return true;
+				// No dedicated toggle for this event (e.g. combat / level-up / death):
+				// sounds are opt-in, so an unconfigured event stays silent.
+				return false;
 		}
 	}
 
@@ -61,7 +63,9 @@ final class SoundActivation
 			case CUSTOM_EVENT:
 				return config.chatMessageSounds();
 			default:
-				return true;
+				// No dedicated toggle for this state (e.g. combat / banking / level-up /
+				// death / locomotion / teleport): sounds are opt-in, so it stays silent.
+				return false;
 		}
 	}
 }
