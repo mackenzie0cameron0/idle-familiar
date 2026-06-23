@@ -673,11 +673,13 @@ public class IdleFamiliarPlugin extends Plugin
 			return;
 		}
 
-		// Passive XP sources (hitpoints regeneration, prayer drain) fire stat
-		// changes but are not active skilling — ignore them so they neither
-		// start skilling nor extend an existing skilling linger.
+		// XP-based skilling requires a REAL XP increase. The login stat-sync — and any
+		// stat change that doesn't raise XP (a level/boost-only update, or passive
+		// regen/drain) — reports activeXpGain=false; treating those as skilling briefly
+		// showed a bogus skill (the last-synced one, e.g. "Sailing") right after login.
+		// Animation-driven skilling is handled separately in onAnimationChanged.
 		String skillName = event.getSkill().getName();
-		if (SkillingActivityTracker.isPassiveSkill(skillName) && !activeXpGain)
+		if (!activeXpGain)
 		{
 			return;
 		}
