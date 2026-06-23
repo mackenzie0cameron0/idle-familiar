@@ -1,5 +1,6 @@
 package com.idlefamiliar;
 
+import com.google.inject.Injector;
 import com.google.inject.Provides;
 import java.awt.image.BufferedImage;
 import java.io.File;
@@ -39,6 +40,8 @@ import net.runelite.client.game.SpriteManager;
 import net.runelite.client.events.ConfigChanged;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
+import net.runelite.client.plugins.PluginManager;
+import net.runelite.client.plugins.xptracker.XpTrackerPlugin;
 import net.runelite.client.plugins.xptracker.XpTrackerService;
 import net.runelite.client.ui.ClientUI;
 import org.slf4j.Logger;
@@ -117,16 +120,20 @@ public class IdleFamiliarPlugin extends Plugin
 	@Inject
 	private ClientUI clientUI;
 
+	@Inject
+	private PluginManager pluginManager;
+
 	/**
-	 * RuneLite's built-in XP Tracker service, used as the primary XP/hour source so the
-	 * widget matches the XP Tracker panel exactly. Injected optionally: its binding lives
-	 * in the XP Tracker plugin's injector and may not be reachable from here, in which
-	 * case this stays null and {@link #xpHrFor} falls back to {@link #xpRateTracker}.
-	 * (javax.inject.@Inject has no 'optional', so the Guice annotation is used
-	 * fully-qualified to avoid colliding with the javax import.)
+	 * RuneLite's XP Tracker service, used as the primary XP/hour source so the widget
+	 * matches the XP Tracker panel exactly. It is bound only inside the XP Tracker
+	 * plugin's own child injector (sibling plugins can't {@code @Inject} it), so it is
+	 * resolved lazily through that plugin's injector via {@link #resolveXpTracker()} and
+	 * cached here. Stays null (→ internal {@link #xpRateTracker} fallback) if the XP
+	 * Tracker plugin is disabled or not yet started.
 	 */
-	@com.google.inject.Inject(optional = true)
 	private XpTrackerService xpTrackerService;
+	/** True once the "sourcing XP/hr from XP Tracker" line has been logged, to log it only once. */
+	private boolean xpTrackerLogged;
 
 	private final IdleStateTracker idleStateTracker = new IdleStateTracker();
 	private final PlayerActivityService activityService = new PlayerActivityService();
@@ -242,8 +249,7 @@ public class IdleFamiliarPlugin extends Plugin
 		soundCueGate.reset();
 		desktopPetWindow.refreshVisibility();
 
-		log.debug("Idle Familiar started (XP Tracker service {})",
-			xpTrackerService != null ? "available" : "unavailable - using internal XP/hr");
+		log.debug("Idle Familiar started");
 	}
 
 	@Override
@@ -1181,15 +1187,57 @@ public class IdleFamiliarPlugin extends Plugin
 	private long xpHrFor(String skill)
 	{
 		Skill resolved = resolveSkill(skill);
-		if (xpTrackerService != null && resolved != null)
+		XpTrackerService service = resolveXpTracker();
+		if (service != null && resolved != null)
 		{
-			int rate = xpTrackerService.getXpHr(resolved);
+			int rate = service.getXpHr(resolved);
 			if (rate > 0)
 			{
 				return rate;
 			}
 		}
 		return xpRateTracker.ratePerHour(skill, System.currentTimeMillis());
+	}
+
+	/**
+	 * Resolve (and cache) RuneLite's {@link XpTrackerService}. It is bound only inside
+	 * the XP Tracker plugin's child injector, so we locate that plugin via
+	 * {@link PluginManager} and pull the singleton from its injector — the same live
+	 * instance the running plugin uses. Returns null until the XP Tracker plugin is
+	 * started (or always, if it is disabled), in which case the caller falls back to
+	 * the internal tracker.
+	 */
+	private XpTrackerService resolveXpTracker()
+	{
+		if (xpTrackerService != null)
+		{
+			return xpTrackerService;
+		}
+		for (Plugin plugin : pluginManager.getPlugins())
+		{
+			if (plugin instanceof XpTrackerPlugin)
+			{
+				Injector injector = plugin.getInjector();
+				if (injector != null)
+				{
+					try
+					{
+						xpTrackerService = injector.getInstance(XpTrackerService.class);
+					}
+					catch (RuntimeException ex)
+					{
+						log.debug("XpTrackerService not available from the XP Tracker plugin injector", ex);
+					}
+				}
+				break;
+			}
+		}
+		if (xpTrackerService != null && !xpTrackerLogged)
+		{
+			xpTrackerLogged = true;
+			log.info("[idle-familiar] XP/hr now sourced from the XP Tracker plugin");
+		}
+		return xpTrackerService;
 	}
 
 	/** Map a skill label (e.g. "Woodcutting") to its {@link Skill}, or {@code null} if unknown. */
