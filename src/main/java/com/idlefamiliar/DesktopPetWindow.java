@@ -135,15 +135,9 @@ public class DesktopPetWindow
 	}
 
 	/**
-	 * Periodically re-assert the window's always-on-top flag. Windows can silently
-	 * drop a {@link JWindow}'s topmost state after other always-on-top windows
-	 * appear or after long uptime - the reported "stops working after ~10 minutes"
-	 * symptom, which toggling the plugin (recreating the window) otherwise fixes.
-	 *
-	 * <p>{@code setAlwaysOnTop(true)} is a no-op while the property is already
-	 * {@code true}, so we flip it off and on to force the native flag to be
-	 * re-applied. This does not steal keyboard focus. Throttled to once every few
-	 * seconds so it is effectively free on the 100ms repaint timer.
+	 * Periodically re-assert always-on-top (Windows can silently drop it after long
+	 * uptime). {@code setAlwaysOnTop(true)} is a no-op when already true, so flip it
+	 * off/on to force re-apply; throttled, and does not steal focus.
 	 */
 	private void reassertAlwaysOnTop()
 	{
@@ -295,13 +289,11 @@ public class DesktopPetWindow
 			float alpha = clampAlpha(config != null ? config.avatarOpacityPercent() / 100.0f : 1.0f);
 			FontMetrics metrics = g.getFontMetrics();
 
-			// One coherent, client-thread-built view of the plugin state to paint from
-			// (vitals, label, icon, message), so a paint never mixes values from
-			// different ticks. The live animation frame is still pulled separately below.
+			// One client-thread-built view to paint from, so a paint never mixes ticks.
+			// The live animation frame is pulled separately below.
 			WidgetSnapshot snapshot = plugin != null ? plugin.getWidgetSnapshot() : null;
 
-			// The active skill icon rides in the XP/h panel row so it stays visible even
-			// when the avatar is collapsed (the panel is drawn in both states).
+			// The skill icon rides in the XP/h row so it stays visible when collapsed.
 			BufferedImage skillIcon = (config != null && config.showSkillIcon() && snapshot != null)
 				? snapshot.getSkillIcon() : null;
 
@@ -372,10 +364,8 @@ public class DesktopPetWindow
 			int originX = Math.max(0, (getWidth() - contentWidth) / 2);
 			int originY = Math.max(0, (getHeight() - contentHeight) / 2);
 
-			// Controls row across the top, anchored to the LEFT edge (originX is a stable
-			// position - the window grows from a fixed top-left), so the collapse chevron
-			// stays put regardless of how the panel width changes or whether collapsed.
-			// (It used to hug the right edge, which moved as stat text widths changed.)
+			// Controls row anchored to the LEFT edge (stable originX), so the chevron
+			// stays put regardless of panel-width or collapse changes.
 			int controlsY = originY;
 			int controlX = originX;
 			caretBounds = new Rectangle(controlX, controlsY, CARET_SIZE, CARET_SIZE);
@@ -434,11 +424,7 @@ public class DesktopPetWindow
 			g.dispose();
 		}
 
-		/**
-		 * Draws one info-panel row: an optional icon (else the dim text label) at the
-		 * left, and the OSRS-yellow value right-aligned. The XP/h row passes the active
-		 * skill icon so it replaces the "XP/h" label while skilling.
-		 */
+		/** Draws one info-panel row: optional icon (else dim label) left, OSRS-yellow value right-aligned. */
 		private void drawPanelRow(Graphics2D g, String label, String value, BufferedImage icon,
 			int x, int top, int innerWidth, FontMetrics metrics)
 		{
@@ -464,10 +450,7 @@ public class DesktopPetWindow
 			g.drawString(value, valueX, baseline);
 		}
 
-		/**
-		 * Draws the return-to-game button: an X glyph on the same dark rounded
-		 * backing as the minimize chevron. Clicking it raises the RuneLite client.
-		 */
+		/** Draws the return-to-game button: an X glyph on the same dark rounded backing as the chevron. */
 		private void drawXButton(Graphics2D g, int x, int y, int size)
 		{
 			g.setColor(new Color(20, 24, 31, 170));
@@ -491,11 +474,7 @@ public class DesktopPetWindow
 			graphics.drawString(message, x + TEXT_PADDING_X, baseline);
 		}
 
-		/**
-		 * Draws an Old School RuneScape style stone panel: warm brown fill with a
-		 * light top-left bevel and dark bottom-right bevel, used for the status pill
-		 * and the info panel so the widget reads as part of the OSRS interface.
-		 */
+		/** Draws an OSRS-style stone panel: warm brown fill with a light top-left and dark bottom-right bevel. */
 		private void drawStonePanel(Graphics2D g, int x, int y, int w, int h)
 		{
 			g.setColor(OSRS_PANEL);
@@ -511,12 +490,7 @@ public class DesktopPetWindow
 			g.drawRoundRect(x, y, w - 1, h - 1, 5, 5);
 		}
 
-		/**
-		 * Raise the RuneLite client window to the front so the user can swap back to
-		 * the game in one click. Finds the client frame by its "RuneLite" title via
-		 * pure AWT (no version-specific API), de-iconifies and focuses it. No-op if
-		 * the frame can't be found.
-		 */
+		/** Raise the RuneLite client window: find its frame by title via pure AWT, de-iconify and focus it. No-op if not found. */
 		private void bringGameClientToFront()
 		{
 			if (tryFocusGameClient())
@@ -563,10 +537,7 @@ public class DesktopPetWindow
 			}
 		}
 
-		/**
-		 * Hit area for the minimize/restore chevron, recomputed each paint. Falls back
-		 * to a top-right box before the first paint has positioned the chevron.
-		 */
+		/** Hit area for the chevron, recomputed each paint; falls back to a top-right box before the first paint. */
 		private Rectangle controlBounds()
 		{
 			if (caretBounds != null)
@@ -576,11 +547,7 @@ public class DesktopPetWindow
 			return new Rectangle(Math.max(0, getWidth() - CARET_SIZE), 0, CARET_SIZE, CARET_SIZE);
 		}
 
-		/**
-		 * Draws a minimal caret (chevron) minimize/restore control inside a
-		 * {@code size x size} box at (x, y). Points down to restore (collapsed),
-		 * up to minimize (expanded).
-		 */
+		/** Draws the chevron minimize/restore control; points down to restore (collapsed), up to minimize (expanded). */
 		private void drawCaret(Graphics2D graphics, int x, int y, int size, boolean pointDown)
 		{
 			graphics.setColor(new Color(20, 24, 31, 170));

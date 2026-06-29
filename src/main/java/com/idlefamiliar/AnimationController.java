@@ -53,14 +53,9 @@ public class AnimationController
 	private volatile double playbackSpeed = 1.0;
 
 	/**
-	 * Asset keys for momentary, event-driven states that read best as a single
-	 * complete play-through (a teleport flourish, a GE "ka-ching", crossing an
-	 * agility obstacle) rather than a loop. When {@link #playFullCycleOneShots} is
-	 * on, entering one of these latches the animation so it finishes its full cycle
-	 * even if the underlying state has already moved on (e.g. agility, where the
-	 * player is already walking again before the obstacle animation would end). The
-	 * latch plays for the sheet's real duration, so it adapts automatically to a
-	 * longer or shorter replacement animation.
+	 * Momentary event keys that read best as a single play-through, not a loop. When
+	 * {@link #playFullCycleOneShots} is on, entering one latches the animation so it
+	 * finishes its full cycle even if the underlying state already moved on (e.g. agility).
 	 */
 	private static final Set<String> ONE_SHOT_KEYS = Collections.unmodifiableSet(
 		new HashSet<>(Arrays.asList("teleporting", "grand_exchange", "agility_loop", "level_up")));
@@ -76,22 +71,10 @@ public class AnimationController
 	/** A one-shot key that just completed; blocks immediate re-latch while still in that state. */
 	private String oneShotJustFinishedKey;
 
-	/**
-	 * Guards the animation/variant maps against a runtime reload racing a paint.
-	 * {@link #getFrameAt} is called from the desktop widget on the Swing EDT, and
-	 * {@link #reloadAnimations()} clears/rebuilds those same maps when the user ticks
-	 * "Reload animations" in the config (which may arrive on the EDT or the client
-	 * thread). Holding this lock across both keeps a reload from interleaving with a
-	 * paint (the lookups are cheap, so the contention is negligible).
-	 */
+	/** Guards the animation/variant maps so a runtime {@link #reloadAnimations()} can't race a widget paint in {@link #getFrameAt}. */
 	private final Object frameLock = new Object();
 
-	/**
-	 * Optional external drop-in folder. When set, a PNG placed here that matches an
-	 * asset file name (e.g. {@code walking_loop.png}) is loaded in preference to the
-	 * bundled resource of the same name — so animations can be added or swapped at
-	 * runtime without rebuilding the jar. {@code null} means "bundled assets only".
-	 */
+	/** Optional drop-in folder; a matching PNG here is loaded in preference to the bundled resource. {@code null} = bundled only. */
 	private File externalAssetDir;
 
 	public AnimationController()
@@ -198,22 +181,19 @@ public class AnimationController
 		{
 			String assetName = resolveAssetName(state, activityLabel);
 
-			// One-shot handling (teleport / GE flourish): play the full cycle once,
-			// latched so it survives the underlying state changing before it ends.
+			// One-shot (teleport / GE / agility): play the full cycle once, latched.
 			BufferedImage oneShotFrame = renderOneShot(assetName, now);
 			if (oneShotFrame != null)
 			{
 				return oneShotFrame;
 			}
 
-			// Prefer a weighted variant; it re-rolls on state entry and on each loop
-			// boundary. Fall back to the pre-loaded primary animation if none exists.
+			// Prefer a weighted variant (re-rolls on entry and each loop); else the primary.
 			AvatarAnimation animation = selectVariantAnimation(assetName, now);
 			long playbackTime;
 			if (animation != null)
 			{
-				// Anchor variant playback to its selection time, so each loop starts on
-				// frame 0 and completes cleanly — which is what the per-loop re-roll keys off.
+				// Anchor playback to selection time so each loop starts on frame 0.
 				playbackTime = now - currentVariantAnchorMillis;
 			}
 			else
@@ -240,13 +220,7 @@ public class AnimationController
 		}
 	}
 
-	/**
-	 * Re-read every animation sheet and {@code weights.json} from disk, picking up
-	 * hand-edited variant weights and any newly dropped-in PNGs without toggling the
-	 * plugin off and on. Safe to call at runtime: it holds {@link #frameLock} so it
-	 * cannot clear the variant maps mid-paint. The next {@link #getFrame} re-rolls a
-	 * fresh variant against the reloaded weights (the current key is reset).
-	 */
+	/** Re-read every sheet and {@code weights.json} from disk at runtime (holds {@link #frameLock}, so safe against a concurrent paint). */
 	public void reloadAnimations()
 	{
 		synchronized (frameLock)
@@ -256,16 +230,9 @@ public class AnimationController
 	}
 
 	/**
-	 * Build a {@link WeightedVariantPicker} covering every sprite-sheet variant
-	 * discovered for {@code assetName}. Variants follow the resolved primary file
-	 * name with a suffix: e.g. for {@code idle} (primary {@code idle_loop.png})
-	 * the candidates are {@code idle_loop}, {@code idle_loop_uncommon},
-	 * {@code idle_loop_rare}, and {@code idle_loop_2}..{@code idle_loop_9}.
-	 *
-	 * <p>Weights come from {@code weights.json} when present, defaulting to 1
-	 * (equal probability) for any variant not listed.
-	 *
-	 * @return a picker, or {@code null} if no primary resource exists for the key
+	 * Build a {@link WeightedVariantPicker} over every discovered variant of {@code assetName}
+	 * (primary + {@code _uncommon}/{@code _rare}/{@code _2}..{@code _9}). Weights come from
+	 * {@code weights.json}, defaulting to 1. Returns {@code null} if no primary resource exists.
 	 */
 	public WeightedVariantPicker buildVariantPicker(String assetName)
 	{
@@ -286,12 +253,7 @@ public class AnimationController
 		return new WeightedVariantPicker(resolvedWeights, random);
 	}
 
-	/**
-	 * Drive the one-shot latch. Returns a frame when a one-shot animation should be
-	 * shown — either continuing a latched one to the end of its single cycle, or
-	 * starting a freshly-entered one — or {@code null} to fall through to normal
-	 * looping playback. Must be called inside {@link #frameLock}.
-	 */
+	/** Drive the one-shot latch: returns a frame while a one-shot should play (continuing or freshly entered), else {@code null}. Call inside {@link #frameLock}. */
 	private BufferedImage renderOneShot(String assetName, long now)
 	{
 		// Forget the "just finished" guard once we have left that one-shot state.
@@ -418,11 +380,8 @@ public class AnimationController
 		}
 		catch (IOException ex)
 		{
-			// Cache a null ONLY when the sheet is genuinely absent, so a missing variant
-			// is not re-attempted every frame. A sheet that EXISTS but failed to decode
-			// (a transient read hiccup on the asset folder, or a momentarily-locked file)
-			// is left uncached, so the next frame retries and recovers the real animation
-			// rather than being stuck on the idle fallback for the rest of the session.
+			// Cache null only when the sheet is genuinely absent (avoid re-attempting every
+			// frame). A sheet that exists but failed to decode is left uncached so it retries.
 			if (!assetExists(variantBase + ".png"))
 			{
 				variantAnimations.put(variantBase, null);
@@ -511,15 +470,8 @@ public class AnimationController
 	{
 		List<String> found = new ArrayList<>();
 		found.add(primaryBase); // the primary sheet is always a variant
-		// Discover variants in BOTH the external drop-in folder AND the bundled
-		// resources (assetExists checks external first, then bundled). Discovery
-		// must NOT be scoped to wherever the primary happened to resolve: a user
-		// who overrides only the primary externally (e.g. drops a custom
-		// fishing_loop.png into the drop-in folder) would otherwise hide every
-		// bundled fishing_loop_2..9, leaving the avatar stuck on the single primary
-		// sheet. The loader still prefers an external sheet over the bundled one per
-		// file (see openAsset), so an external variant continues to win when both
-		// exist.
+		// Discover across BOTH external and bundled (assetExists checks external first),
+		// so overriding only the primary externally doesn't hide the bundled _2..9 variants.
 		for (String suffix : new String[]{"uncommon", "rare"})
 		{
 			String candidate = primaryBase + "_" + suffix;
@@ -587,10 +539,8 @@ public class AnimationController
 			return cachedWeights;
 		}
 
-		// Start from the bundled defaults, then overlay the external drop-in file so a
-		// user-supplied weights.json overrides bundled entries PER KEY rather than
-		// replacing the whole file. Dropping in a weights.json that only tunes "idle"
-		// no longer silently wipes every other bundled weight.
+		// Bundled defaults first, then overlay the external file so a drop-in weights.json
+		// overrides per key rather than replacing the whole file.
 		Map<String, Integer> merged = new LinkedHashMap<>();
 		try (InputStream bundled = AnimationController.class.getResourceAsStream(RESOURCE_DIR + WEIGHTS_FILE))
 		{
@@ -621,11 +571,7 @@ public class AnimationController
 		return cachedWeights;
 	}
 
-	/**
-	 * Minimal hand-rolled parse of a {@code {"key": weight, ...}} object into a map.
-	 * No JSON library is guaranteed in the plugin runtime, so parse by hand. A
-	 * {@code null} stream or malformed entries yield an empty map / skipped keys.
-	 */
+	/** Minimal hand-rolled parse of a {@code {"key": weight, ...}} object into a map; null/malformed yield empty/skipped. */
 	private static Map<String, Integer> parseWeights(InputStream stream) throws IOException
 	{
 		if (stream == null)
@@ -664,12 +610,8 @@ public class AnimationController
 		}
 		catch (IOException ex)
 		{
-			// No usable sheet for this state — it is genuinely absent (e.g. no bundled
-			// combat/low_health sheet) or a transient I/O failure on the asset folder.
-			// Leave the state UNMAPPED so getFrameAt falls back to the real idle
-			// animation instead of storing a generated dev-placeholder here. The map is
-			// cleared and rebuilt on every loadDefaultAnimations()/reloadAnimations(),
-			// so a sheet that reappears is picked up on the next reload.
+			// No usable sheet — leave the state unmapped so getFrameAt falls back to idle.
+			// Rebuilt on every (re)load, so a sheet that reappears is picked up.
 			animations.remove(state);
 		}
 	}
@@ -728,15 +670,7 @@ public class AnimationController
 		}
 	}
 
-	/**
-	 * The absolute last-resort frame, returned only when no real sheet — not even the
-	 * idle fallback — is available. It is intentionally a fully transparent frame: a
-	 * missing or (transiently) unreadable sheet must NEVER surface a generated
-	 * placeholder "dev image" to the user. The normal path for a failed sheet is to
-	 * fall back to the real idle animation (see {@link #load} and {@link #getFrameAt});
-	 * this blank frame only covers the case where even that is gone, where showing
-	 * nothing is preferable to programmer-art.
-	 */
+	/** Last-resort fully-transparent frame, returned only when not even the idle fallback is available (never a generated placeholder). */
 	BufferedImage createFallbackFrame()
 	{
 		// A fresh TYPE_INT_ARGB image is all zeroes — every pixel fully transparent.

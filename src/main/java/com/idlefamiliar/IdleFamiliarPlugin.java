@@ -58,48 +58,22 @@ public class IdleFamiliarPlugin extends Plugin
 	private static final int COMBAT_LINGER_TICKS = 4;
 	/** Ticks the TELEPORTING state lingers after a teleport animation fires. */
 	private static final int TELEPORT_LINGER_TICKS = 3;
-	/** Ticks the GRAND_EXCHANGE state lingers after an offer fills (so it is visible). */
+	/** Ticks the GRAND_EXCHANGE state lingers after an offer fills. */
 	private static final int GE_FILLED_LINGER_TICKS = 5;
-	/**
-	 * Ticks the SKILLING (Agility) state is held after an Agility XP drop, surviving
-	 * movement. Agility is XP-detected (no clean animation namespace) and the player
-	 * is already moving away when the XP lands, so the normal movement-cancel would
-	 * otherwise drop the state before it is ever shown. This is only a brief trigger
-	 * to ENTER the agility state (like the teleport/GE lingers); the actual playback
-	 * length is owned by the one-shot latch in {@code AnimationController}
-	 * ({@code agility_loop} is a {@code ONE_SHOT_KEY}), which plays the sheet's full
-	 * cycle to completion regardless of state - so it adapts automatically to a
-	 * longer or shorter agility animation and this value never needs tuning.
-	 */
+	/** Brief trigger to enter SKILLING (Agility) after an Agility XP drop; survives movement. The one-shot latch owns playback length. */
 	private static final int AGILITY_LINGER_TICKS = 2;
-	/** Ticks the DEATH reaction is shown after the player's hitpoints hit 0. */
+	/** Ticks the DEATH reaction is shown after hitpoints hit 0. */
 	private static final int DEATH_LINGER_TICKS = 8;
-	/**
-	 * Ticks the LEVEL_UP flourish state is held after a real level rises. Brief, like
-	 * the teleport/GE lingers - {@code level_up} is a one-shot key, so the latch plays
-	 * the full flourish to completion regardless of this value.
-	 */
+	/** Brief trigger to enter the LEVEL_UP flourish; level_up is a one-shot key that owns its playback. */
 	private static final int LEVEL_UP_LINGER_TICKS = 3;
 	/** Ticks a configured chat-message trigger is shown as a custom event. */
 	private static final int CHAT_MESSAGE_LINGER_TICKS = 4;
-	/**
-	 * OSRS bank interface group id (RuneLite {@code InterfaceID.BANK}). The bank
-	 * widget loading/closing under this group is a precise open/close signal for
-	 * the BANKING state. Using the literal keeps us off version-specific constant
-	 * class names; this id has been stable for years.
-	 */
+	/** OSRS bank interface group id (InterfaceID.BANK); precise open/close signal for BANKING. Stable for years. */
 	private static final int BANK_GROUP_ID = 12;
 	/** Sub-directory under the RuneLite home for external, user-supplied animation sheets. */
 	private static final String EXTERNAL_AVATAR_DIR = "idle-familiar/avatar";
 
-	/**
-	 * Hard cap on the effective skilling linger, in game ticks. The linger is the
-	 * post-stop tail (and the gap-bridge for click-per-item skills). A stale value
-	 * persisted in a profile from earlier development could otherwise survive the
-	 * code default and make the avatar over-run an activity by several animation
-	 * loops (the reported smithing tail); clamping the value we actually use keeps
-	 * the drop crisp for every skill regardless of what is stored. ~2.4s.
-	 */
+	/** Hard cap on the effective skilling linger (ticks), so a stale saved value can't make the avatar over-run an activity. */
 	private static final int MAX_SKILLING_LINGER_TICKS = 4;
 
 	@Inject
@@ -123,14 +97,7 @@ public class IdleFamiliarPlugin extends Plugin
 	@Inject
 	private PluginManager pluginManager;
 
-	/**
-	 * RuneLite's XP Tracker service, used as the primary XP/hour source so the widget
-	 * matches the XP Tracker panel exactly. It is bound only inside the XP Tracker
-	 * plugin's own child injector (sibling plugins can't {@code @Inject} it), so it is
-	 * resolved lazily through that plugin's injector via {@link #resolveXpTracker()} and
-	 * cached here. Stays null (→ internal {@link #xpRateTracker} fallback) if the XP
-	 * Tracker plugin is disabled or not yet started.
-	 */
+	/** Primary XP/hr source (matches the XP Tracker panel). Bound only in the XP Tracker plugin's child injector, so resolved lazily via {@link #resolveXpTracker()}; null → {@link #xpRateTracker} fallback. */
 	private XpTrackerService xpTrackerService;
 	/** True once the "sourcing XP/hr from XP Tracker" line has been logged, to log it only once. */
 	private boolean xpTrackerLogged;
@@ -178,13 +145,7 @@ public class IdleFamiliarPlugin extends Plugin
 	/** Last skill XP values, used to distinguish real XP gains from passive stat changes. */
 	private final Map<Skill, Integer> lastSkillXp = new HashMap<>();
 
-	/**
-	 * Cached skill-icon sprite for the confirmed skill, refreshed on the client
-	 * thread each game tick and copied into {@link #widgetSnapshot}. The
-	 * {@link net.runelite.client.game.SpriteManager#getSprite} fetch must stay on the
-	 * client thread (it throws off it), which is why the icon is cached here for the
-	 * widget instead of being fetched during the widget's EDT paint.
-	 */
+	/** Cached confirmed-skill icon, refreshed on the client thread (SpriteManager#getSprite must run there) and published to the widget. */
 	private BufferedImage confirmedSkillIcon;
 	/** Cached vitals (client thread); published to the widget via {@link #widgetSnapshot}. */
 	private int cachedHitpoints;
@@ -193,12 +154,7 @@ public class IdleFamiliarPlugin extends Plugin
 	private int cachedMaxPrayer;
 	/** Cached occupied inventory slot count (client thread); published via {@link #widgetSnapshot}. */
 	private int cachedInventoryCount;
-	/**
-	 * The latest immutable view the desktop widget paints from, rebuilt on the client
-	 * thread each tick. The widget reads this single volatile reference instead of
-	 * reaching across the thread boundary for each field, so a paint always sees a
-	 * coherent set of values captured at the same instant.
-	 */
+	/** Immutable per-tick view the widget paints from; one volatile ref so a paint sees a coherent value set. */
 	private volatile WidgetSnapshot widgetSnapshot = WidgetSnapshot.loggedOut();
 	/** Whether the inventory was full on the previous update, for rising-edge detection. */
 	private boolean inventoryWasFull;
@@ -216,9 +172,7 @@ public class IdleFamiliarPlugin extends Plugin
 	@Override
 	protected void startUp()
 	{
-		// Allow users to drop in / override animation sheets at runtime (no rebuild)
-		// by placing PNGs in <RuneLite home>/idle-familiar/avatar/. Created up-front
-		// so the folder is easy to find. Falls back to bundled assets when empty.
+		// Runtime drop-in folder for user PNGs (no rebuild); falls back to bundled assets.
 		externalAvatarDir = new File(RuneLite.RUNELITE_DIR, EXTERNAL_AVATAR_DIR);
 		//noinspection ResultOfMethodCallIgnored
 		externalAvatarDir.mkdirs();
@@ -324,16 +278,7 @@ public class IdleFamiliarPlugin extends Plugin
 		logDebugState(localPlayer);
 	}
 
-	/**
-	 * Per-tick instrumentation for diagnosing the timing/feel issues that are only
-	 * visible in a running client (animation flicker, activity tail). Gated behind
-	 * the {@code debugState} config so it is silent in normal use. Enable "Debug
-	 * state" in the plugin config, perform the activity (fish / fletch / mine), and
-	 * read the RuneLite client log: each line shows the raw animation id the game
-	 * reports, whether the registry recognises it, the resolved skilling/state, and
-	 * whether target-based sustain is holding skilling alive — which makes both the
-	 * "missing whitelist id" and the "genuinely still animating" cases self-evident.
-	 */
+	/** Per-tick diagnostics (raw anim id, registry match, resolved state, target-sustain), gated behind the {@code debugState} config. */
 	private void logDebugState(Player localPlayer)
 	{
 		if (!config.debugState() || localPlayer == null)
@@ -341,10 +286,7 @@ public class IdleFamiliarPlugin extends Plugin
 			return;
 		}
 		int anim = localPlayer.getAnimation();
-		// Interaction target: decisive for whether target-sustain can engage. If this
-		// reads "none" while salvaging, the hook/shipwreck is a game object (not an
-		// Actor) and getInteracting() can't see it — target-sustain needs a different
-		// signal. If it names an NPC, whitelisting the salvage anim id below is enough.
+		// Interaction target: decisive for whether target-sustain can engage.
 		net.runelite.api.Actor interacting = localPlayer.getInteracting();
 		String interactingDesc = "none";
 		if (interacting != null)
@@ -367,12 +309,7 @@ public class IdleFamiliarPlugin extends Plugin
 			activityService.getActivityLabel());
 	}
 
-	/**
-	 * Advance the short-lived TELEPORTING and GRAND_EXCHANGE linger counters and
-	 * mirror them onto the activity service. Both are armed by their event handlers
-	 * and decay on their own so the avatar shows them briefly then returns to its
-	 * underlying state.
-	 */
+	/** Advance the transient linger counters (teleport, GE, agility, death, level-up, chat) and mirror them onto the activity service. */
 	private void updateTransientStates()
 	{
 		if (teleportTicksRemaining > 0)
@@ -559,14 +496,11 @@ public class IdleFamiliarPlugin extends Plugin
 			return;
 		}
 
-		// Whitelist-only skilling detection: an animation refreshes the skilling
-		// linger (and sets the label / toad sprite) only when it is a recognised
-		// skilling animation. Emotes, eating, walking and teleport wind-ups are
-		// absent from the registry and therefore silently ignored.
+		// Whitelist-only: only a recognised skilling animation refreshes the linger.
+		// Emotes, eating, walking and teleport wind-ups aren't in the registry.
 		activityRegistry.getActivityForAnimation(animId).ifPresent(this::markSkillingSignal);
 
-		// A teleport is a committed action; surface it briefly via its own state.
-		// (Intentionally silent — teleports are frequent, so no sound cue is played.)
+		// Surface a teleport briefly via its own state (silent — teleports are frequent).
 		if (activityRegistry.isTeleportAnimation(animId))
 		{
 			teleportTicksRemaining = TELEPORT_LINGER_TICKS;
@@ -592,20 +526,10 @@ public class IdleFamiliarPlugin extends Plugin
 	}
 
 	/**
-	 * Arm combat ONLY on real hit evidence, and accurately enough to exclude
-	 * damage that is NOT combat:
-	 * <ul>
-	 *   <li><b>You dealt a hit</b> ({@code hitsplat.isMine()}) — you only deal
-	 *       damage by attacking, so this is unambiguous combat, on any actor.</li>
-	 *   <li><b>You took a hit while engaged</b> — a hitsplat on you while you have
-	 *       an interaction target and are NOT actively skilling. The skilling guard
-	 *       stops a poison/venom tick (or a fishing-spot/banker interaction) from
-	 *       flipping the avatar to combat mid-activity; the target guard stops a
-	 *       lone poison/environmental tick while walking from arming combat.</li>
-	 * </ul>
-	 * This replaces the old "any interaction target = combat" heuristic.
-	 * {@link #combatTicksRemaining} decays in {@link #updateLingeringActivity} and
-	 * is refreshed by combat XP in {@link #onStatChanged}.
+	 * Arm combat only on real hit evidence: a hit you dealt ({@code isMine()}), or a hit
+	 * on you while you have a target and are not skilling (guards exclude poison/venom and
+	 * fishing-spot/banker interactions). {@link #combatTicksRemaining} decays in
+	 * {@link #updateLingeringActivity}, refreshed by combat XP in {@link #onStatChanged}.
 	 */
 	@Subscribe
 	public void onHitsplatApplied(HitsplatApplied event)
@@ -694,11 +618,9 @@ public class IdleFamiliarPlugin extends Plugin
 			return;
 		}
 
-		// XP-based skilling requires a REAL XP increase. The login stat-sync — and any
-		// stat change that doesn't raise XP (a level/boost-only update, or passive
-		// regen/drain) — reports activeXpGain=false; treating those as skilling briefly
-		// showed a bogus skill (the last-synced one, e.g. "Sailing") right after login.
-		// Animation-driven skilling is handled separately in onAnimationChanged.
+		// XP-based skilling requires a REAL XP increase; the login stat-sync and
+		// level/boost-only or passive changes report activeXpGain=false (those briefly
+		// showed a bogus last-synced skill). Animation-driven skilling is separate.
 		String skillName = event.getSkill().getName();
 		if (!activeXpGain)
 		{
@@ -748,8 +670,7 @@ public class IdleFamiliarPlugin extends Plugin
 		animationController.setPlaybackSpeed(config.animationSpeed().multiplier());
 		animationController.setPlayFullCycleOneShots(config.playFullCycleAnimations());
 
-		// Debug preview: force a chosen state/skill so art can be checked without
-		// reproducing the in-game condition. OFF (the default) renders normally.
+		// Debug preview: force a chosen state/skill so art can be checked directly.
 		AvatarPreview preview = config.debugPreviewState();
 		if (preview != null && preview != AvatarPreview.OFF)
 		{
@@ -768,13 +689,7 @@ public class IdleFamiliarPlugin extends Plugin
 		return widgetSnapshot;
 	}
 
-	/**
-	 * Assemble and publish the immutable {@link WidgetSnapshot} the desktop widget
-	 * paints from. Called on the client thread at the end of each tick, so the widget
-	 * (Swing EDT) reads one coherent set of values instead of racing each field. The
-	 * animation frame itself is still pulled live in {@link #getCurrentFrame()} because
-	 * it advances on the 100ms repaint timer, not the game tick.
-	 */
+	/** Build and publish the immutable {@link WidgetSnapshot} the widget paints from (client thread, end of tick). The live frame is pulled separately in {@link #getCurrentFrame()}. */
 	private void publishWidgetSnapshot()
 	{
 		String animationLabel = currentAvatarState == AvatarState.COMBAT
@@ -815,21 +730,16 @@ public class IdleFamiliarPlugin extends Plugin
 
 		movedThisTick = true;
 
-		// The player moved this tick. Movement and skilling are mutually exclusive,
-		// so cancel the skilling linger immediately — this is the core fix for the
-		// fish-then-walk-to-bank false positive, where a replayed loop animation
-		// used to keep the skilling window alive for ~27 seconds.
+		// Movement and skilling are mutually exclusive, so cancel the skilling linger
+		// immediately (fixes the fish-then-walk false positive). Movement also closes
+		// banking, in case a WidgetClosed(bank) was missed.
 		skillingTracker.cancelLinger();
 		activityService.setActivityLabel("");
-		// You cannot move with the bank open, so movement also closes banking — a
-		// safety net in case a WidgetClosed(bank) event was missed.
 		activityService.setBanking(false);
 		markActivity(ActivityType.WALKING);
 
-		// Distinguish walking (1 tile/tick) from running (2 tiles/tick) by tile
-		// delta. Larger deltas (teleports, region loads) are not locomotion and are
-		// left to the teleport handler. distanceTo() returns a large value across
-		// planes, so those are ignored too.
+		// Walking = 1 tile/tick, running = 2; larger deltas (teleport/region load,
+		// cross-plane) are not locomotion and left to the teleport handler.
 		int distance = currentLocation.distanceTo(lastPlayerLocation);
 		if (distance == 1)
 		{
@@ -844,16 +754,9 @@ public class IdleFamiliarPlugin extends Plugin
 	}
 
 	/**
-	 * Poll the player's live animation every tick and treat a whitelisted skilling
-	 * animation as ground truth for "skilling right now". For sustained skills
-	 * (mining, woodcutting, fishing) the action animation is present continuously
-	 * while working and gone the instant you stop, so this — combined with a tiny
-	 * linger — lets the avatar drop out of skilling almost immediately rather than
-	 * riding out a long window. The short linger only bridges the sub-second
-	 * animation gaps of click-per-item skills (fletching, some cooking).
-	 *
-	 * <p>{@link #onAnimationChanged} still records signals too, so a brief one-shot
-	 * animation that starts and ends between tick boundaries is not missed.
+	 * Treat a whitelisted live animation as ground truth for "skilling now". Sustained
+	 * skills drop almost immediately on stop; the short linger only bridges click-per-item
+	 * gaps. {@link #onAnimationChanged} also records signals, catching sub-tick one-shots.
 	 */
 	private void updateSkillingFromAnimation(Player localPlayer)
 	{
@@ -926,15 +829,10 @@ public class IdleFamiliarPlugin extends Plugin
 
 		boolean reactFull = config.enableInventoryFullWarning() && full;
 
-		// Rising edge: the inventory just filled. A gathering action (fishing,
-		// mining, woodcutting) has necessarily stopped, but target-based sustain
-		// keeps the player "interacting" with the fishing spot/rock, so skilling —
-		// which outranks INVENTORY_FULL in the state ladder — would otherwise keep
-		// the skilling animation looping for several seconds before the inventory-
-		// full reaction surfaces. Cancel the skilling linger now so the reaction
-		// shows on the same tick the inventory fills. A continuous skill that legit-
-		// imately runs with a full inventory (e.g. cooking) re-confirms via its
-		// per-tick animation on the next tick, so this only suppresses the stale tail.
+		// Rising edge: inventory just filled. Gathering has stopped, but target-sustain
+		// keeps skilling (which outranks INVENTORY_FULL) alive, masking the reaction.
+		// Cancel the linger so it shows this tick; a skill that legitimately runs full
+		// (cooking) re-confirms next tick via its animation.
 		if (reactFull && !inventoryWasFull)
 		{
 			skillingTracker.cancelLinger();
@@ -954,24 +852,16 @@ public class IdleFamiliarPlugin extends Plugin
 		int currentTick = idleStateTracker.getCurrentTick();
 		int lingerTicks = skillingLingerTicks();
 
-		// Target-based sustain for NPC-interaction skills (fishing, thieving): while
-		// the player keeps interacting with the SAME actor that a skilling animation
-		// was confirmed against, skilling stays alive across animation gaps and drops
-		// the instant the target changes/clears — decoupling the inter-action bridge
-		// from the post-stop tail (the core tension a single global linger can't
-		// resolve). An opaque identity token keeps the tracker free of RuneLite types
-		// and needs no fishing-spot ID list. Movement already cancelled the linger and
-		// cleared lastSignalTick this tick, so a moving player cannot (re)confirm a
-		// target here.
+		// Target-based sustain for NPC skills (fishing, thieving): while the player keeps
+		// interacting with the SAME actor a skilling animation was confirmed against,
+		// skilling survives animation gaps and drops the instant the target clears. An
+		// opaque identity token avoids a fishing-spot ID list. Movement already cancelled
+		// the linger this tick, so a moving player can't re-confirm here.
 		int targetToken = hasTarget ? System.identityHashCode(target) : SkillingActivityTracker.NO_TARGET;
 		skillingTracker.recordInteractionTarget(targetToken, currentTick);
 
-		// Combat is NO LONGER inferred from "has an interaction target". That old
-		// heuristic read bankers, shopkeepers, quest NPCs, tool leprechauns and even
-		// fishing spots (before their animation confirmed) as COMBAT — the reported
-		// false positive. Combat is now armed only by real hit evidence in
-		// onHitsplatApplied (a hitsplat on the player, or one the player dealt to its
-		// target); here we just decay that linger.
+		// Combat is armed only by real hit evidence (onHitsplatApplied), not "has a target"
+		// — that old heuristic mis-read bankers/fishing spots as combat. Here we just decay.
 		if (combatTicksRemaining > 0)
 		{
 			combatTicksRemaining--;
@@ -985,15 +875,9 @@ public class IdleFamiliarPlugin extends Plugin
 			combatStyle = null;
 		}
 
-		// NB: the skilling linger is now refreshed ONLY by whitelisted skilling
-		// animations (onAnimationChanged) and by XP-drop signals (onStatChanged).
-		// The old "any animation while not in combat refreshes skilling" heuristic
-		// was removed — it was what let the walk animation resurrect a stale
-		// skilling state. Movement explicitly cancels the linger in updateMovement.
-
-		// The Agility hold keeps skilling alive across the movement that an obstacle
-		// requires (movement cancelled the tracker linger above), so the agility
-		// animation plays a full loop instead of being cut to a fraction by walking.
+		// The skilling linger is refreshed ONLY by whitelisted animations and XP drops;
+		// movement explicitly cancels it. The Agility hold keeps skilling alive across the
+		// movement an obstacle requires, so the agility animation plays a full loop.
 		boolean agilityHold = agilityTicksRemaining > 0;
 
 		activityService.setInCombat(config.reactToCombat() && combatLingering);
@@ -1167,16 +1051,7 @@ public class IdleFamiliarPlugin extends Plugin
 		return skillingTracker.getConfirmedSkill(idleStateTracker.getCurrentTick(), skillingLingerTicks());
 	}
 
-	/**
-	 * The skilling linger actually used by detection, clamped to
-	 * {@link #MAX_SKILLING_LINGER_TICKS}. The linger is both the gap-bridge for
-	 * click-per-item skills and the post-stop tail; clamping it here means a large
-	 * value left over in a saved profile (the most likely cause of an avatar that
-	 * over-runs an activity by several animation loops, e.g. the smithing tail)
-	 * cannot produce a long tail, while sustained skills still drop promptly off
-	 * the live animation. NPC skills (fishing) ignore this entirely via
-	 * target-based sustain.
-	 */
+	/** Effective skilling linger, clamped to {@link #MAX_SKILLING_LINGER_TICKS} so a stale saved value can't make the avatar over-run an activity. */
 	private int skillingLingerTicks()
 	{
 		return Math.max(1, Math.min(MAX_SKILLING_LINGER_TICKS, config.skillingLingerTicks()));
@@ -1214,14 +1089,7 @@ public class IdleFamiliarPlugin extends Plugin
 		return xpRateTracker.ratePerHour(skill, System.currentTimeMillis());
 	}
 
-	/**
-	 * Resolve (and cache) RuneLite's {@link XpTrackerService}. It is bound only inside
-	 * the XP Tracker plugin's child injector, so we locate that plugin via
-	 * {@link PluginManager} and pull the singleton from its injector — the same live
-	 * instance the running plugin uses. Returns null until the XP Tracker plugin is
-	 * started (or always, if it is disabled), in which case the caller falls back to
-	 * the internal tracker.
-	 */
+	/** Resolve (and cache) the {@link XpTrackerService} from the XP Tracker plugin's child injector; null if that plugin isn't started. */
 	private XpTrackerService resolveXpTracker()
 	{
 		if (xpTrackerService != null)
@@ -1272,12 +1140,7 @@ public class IdleFamiliarPlugin extends Plugin
 		}
 	}
 
-	/**
-	 * Refresh {@link #confirmedSkillIcon} on the client thread (called from
-	 * {@link #onGameTick}). {@link net.runelite.client.game.SpriteManager} loads
-	 * sprites asynchronously, so the first ticks after a skill is confirmed may
-	 * still yield {@code null} until the sprite is ready.
-	 */
+	/** Refresh {@link #confirmedSkillIcon} on the client thread; SpriteManager loads async, so it may be null for the first few ticks. */
 	private void updateConfirmedSkillIcon()
 	{
 		Integer spriteId = SkillIcons.spriteId(getConfirmedSkill());

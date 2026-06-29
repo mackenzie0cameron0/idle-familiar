@@ -41,31 +41,11 @@ public class PlayerActivityService
 	}
 
 	/**
-	 * The avatar state PRIORITY LADDER. When several conditions are true at once,
-	 * the avatar can only show one — the highest-priority match wins. This method
-	 * is the single place that ordering lives: each {@code if} below is one rung,
-	 * highest priority first. To change which reaction wins, MOVE a whole
-	 * {@code if (...) return ...;} block up or down. The current order, top to
-	 * bottom, is:
-	 *
-	 * <ol>
-	 *   <li>LOGGED_OUT      - not logged in (overrides everything)</li>
-	 *   <li>DEATH           - the player just died (hitpoints hit 0)</li>
-	 *   <li>LOW_HEALTH      - hitpoints at/under the low-HP threshold</li>
-	 *   <li>LOW_PRAYER      - prayer at/under the low-prayer threshold</li>
-	 *   <li>LEVEL_UP        - a real level just increased (momentary flourish)</li>
-	 *   <li>CUSTOM_EVENT    - a configured chat message just matched</li>
-	 *   <li>AFK_WARNING     - idle past the AFK-warning threshold</li>
-	 *   <li>BANKING         - bank interface open (kept above combat)</li>
-	 *   <li>COMBAT          - confirmed combat (real hit evidence)</li>
-	 *   <li>TELEPORTING     - teleport just cast (above skilling so Magic XP can't mask it)</li>
-	 *   <li>SKILLING        - actively skilling</li>
-	 *   <li>INVENTORY_FULL  - inventory just filled</li>
-	 *   <li>GRAND_EXCHANGE  - a GE offer just filled</li>
-	 *   <li>WALKING / RUNNING - locomotion</li>
-	 *   <li>PLAYER_IDLE     - idle threshold reached, nothing else happening</li>
-	 *   <li>PLAYER_ACTIVE   - logged in, doing something unclassified (fallthrough)</li>
-	 * </ol>
+	 * The avatar state PRIORITY LADDER: the highest-priority active condition wins.
+	 * Each {@code if} below is one rung, highest first; move a whole block to re-rank.
+	 * Order: LOGGED_OUT, DEATH, LOW_HEALTH, LOW_PRAYER, LEVEL_UP, CUSTOM_EVENT,
+	 * AFK_WARNING, BANKING, COMBAT, TELEPORTING, SKILLING, INVENTORY_FULL,
+	 * GRAND_EXCHANGE, WALKING/RUNNING, PLAYER_IDLE, PLAYER_ACTIVE (fallthrough).
 	 */
 	public AvatarState resolveState(boolean idle, boolean afkWarning)
 	{
@@ -74,8 +54,7 @@ public class PlayerActivityService
 			return AvatarState.LOGGED_OUT;
 		}
 
-		// Death sits at the top of the logged-in ladder: hitpoints hit 0, which would
-		// also trip LOW_HEALTH, so it must win.
+		// Death tops the logged-in ladder: HP 0 would also trip LOW_HEALTH, so it must win.
 		if (dead)
 		{
 			return AvatarState.DEATH;
@@ -91,8 +70,7 @@ public class PlayerActivityService
 			return AvatarState.LOW_PRAYER;
 		}
 
-		// A real level-up is a brief celebratory flourish that interrupts ordinary
-		// activity, but not a low-vitals warning or death.
+		// A brief flourish that interrupts ordinary activity, but not vitals/death.
 		if (levelUp)
 		{
 			return AvatarState.LEVEL_UP;
@@ -108,9 +86,7 @@ public class PlayerActivityService
 			return AvatarState.AFK_WARNING;
 		}
 
-		// Banking sits above combat: opening a bank means interacting with a banker
-		// NPC / booth, which must never be misread as combat. It is also a clear,
-		// deliberate activity worth its own state.
+		// Banking sits above combat so interacting with a banker is never misread as combat.
 		if (banking)
 		{
 			return AvatarState.BANKING;
@@ -121,10 +97,8 @@ public class PlayerActivityService
 			return AvatarState.COMBAT;
 		}
 
-		// Teleporting is a committed, momentary action and sits ABOVE skilling: a
-		// teleport cast also drops Magic XP, which would otherwise mark the avatar
-		// as "skilling Magic" and mask the teleport. Showing the teleport is the
-		// accurate read of what just happened.
+		// Teleporting sits above skilling: a teleport also drops Magic XP, which would
+		// otherwise mask it as "skilling Magic".
 		if (teleporting)
 		{
 			return AvatarState.TELEPORTING;
@@ -140,16 +114,13 @@ public class PlayerActivityService
 			return AvatarState.INVENTORY_FULL;
 		}
 
-		// A filled GE offer is a discrete, actionable event worth surfacing even
-		// while the player is walking, so it sits just above the locomotion states.
+		// A filled GE offer surfaces even while walking, so it sits above locomotion.
 		if (grandExchangeFilled)
 		{
 			return AvatarState.GRAND_EXCHANGE;
 		}
 
-		// Locomotion is the "default active" state when nothing more specific is
-		// happening; walking and running are distinct so the avatar can show
-		// different sheets for each.
+		// Locomotion is the default-active state; walking and running use distinct sheets.
 		if (walking)
 		{
 			return AvatarState.WALKING;
@@ -223,19 +194,9 @@ public class PlayerActivityService
 		return skilling;
 	}
 
-	public boolean isInCombat()
-	{
-		return inCombat;
-	}
-
 	public void setBanking(boolean banking)
 	{
 		this.banking = banking;
-	}
-
-	public boolean isBanking()
-	{
-		return banking;
 	}
 
 	public void setGrandExchangeFilled(boolean grandExchangeFilled)
@@ -243,19 +204,9 @@ public class PlayerActivityService
 		this.grandExchangeFilled = grandExchangeFilled;
 	}
 
-	public boolean isGrandExchangeFilled()
-	{
-		return grandExchangeFilled;
-	}
-
 	public void setTeleporting(boolean teleporting)
 	{
 		this.teleporting = teleporting;
-	}
-
-	public boolean isTeleporting()
-	{
-		return teleporting;
 	}
 
 	public void setDead(boolean dead)
@@ -278,18 +229,9 @@ public class PlayerActivityService
 		this.walking = walking;
 	}
 
-	public boolean isWalking()
-	{
-		return walking;
-	}
-
 	public void setRunning(boolean running)
 	{
 		this.running = running;
 	}
 
-	public boolean isRunning()
-	{
-		return running;
-	}
 }
