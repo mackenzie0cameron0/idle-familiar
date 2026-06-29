@@ -9,12 +9,12 @@ client.
 ## Preview
 
 <p>
-  <img src="images/idle.gif" width="180" alt="Idle avatar" />
-  <img src="images/grand-exchange.gif" width="180" alt="Grand Exchange reaction" />
-  <img src="images/afk.gif" width="180" alt="AFK reaction" />
+  <img src="images/fish.gif" width="180" alt="Fishing avatar" />
+  <img src="images/full-inventory.gif" width="180" alt="Full inventory alert" />
+  <img src="images/afk.gif" width="180" alt="AFK avatar" />
 </p>
 
-The avatar at rest, a completed Grand Exchange offer, and the AFK reaction.
+The avatar fishing, a full-inventory alert, and the AFK reaction.
 
 ## Features
 
