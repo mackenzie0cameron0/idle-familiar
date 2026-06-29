@@ -6,8 +6,15 @@ teleporting, idling, and more. It is a passive status companion, with a focus on
 idle/AFK awareness, that lives in its own always-on-top window outside the game
 client.
 
-> Screenshots / GIFs: _add before Plugin Hub submission_ — the desktop widget plus
-> a couple of skill animations.
+## Preview
+
+<p>
+  <img src="images/idle.gif" width="180" alt="Idle avatar" />
+  <img src="images/grand-exchange.gif" width="180" alt="Grand Exchange reaction" />
+  <img src="images/afk.gif" width="180" alt="AFK reaction" />
+</p>
+
+The avatar at rest, a completed Grand Exchange offer, and the AFK reaction.
 
 ## Features
 
