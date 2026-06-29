@@ -16,7 +16,7 @@ import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
 import net.runelite.api.GameState;
 import net.runelite.api.GrandExchangeOfferState;
-import net.runelite.api.InventoryID;
+import net.runelite.api.gameval.InventoryID;
 import net.runelite.api.Item;
 import net.runelite.api.ItemContainer;
 import net.runelite.api.Player;
@@ -651,7 +651,7 @@ public class IdleFamiliarPlugin extends Plugin
 	@Subscribe
 	public void onItemContainerChanged(ItemContainerChanged event)
 	{
-		if (event.getContainerId() == InventoryID.INVENTORY.getId())
+		if (event.getContainerId() == InventoryID.INV)
 		{
 			if (skillingTracker.isSkilling(idleStateTracker.getCurrentTick(), skillingLingerTicks()))
 			{
@@ -805,7 +805,7 @@ public class IdleFamiliarPlugin extends Plugin
 
 	private void updateInventoryFull()
 	{
-		updateInventoryFull(client.getItemContainer(InventoryID.INVENTORY));
+		updateInventoryFull(client.getItemContainer(InventoryID.INV));
 	}
 
 	private void updateInventoryFull(ItemContainer inventory)
