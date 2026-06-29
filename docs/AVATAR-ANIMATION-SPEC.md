@@ -294,7 +294,7 @@ to files per section 7.2.
 | 3 | `LOW_HEALTH` | HP at/under **Low HP threshold** (`lowHpThreshold`, default 20). Gated by "Low HP warning". | `low_health` |
 | 4 | `LOW_PRAYER` | Prayer at/under **Low prayer threshold** (`lowPrayerThreshold`, default 10). Gated by "Low prayer warning". | `low_prayer` |
 | 5 | `LEVEL_UP` | A real skill level just increased. Momentary (one-shot). | `level_up` |
-| 6 | `CUSTOM_EVENT` | A configured **chat-message filter** just matched. Brief. | `active` |
+| 6 | `CUSTOM_EVENT` | A configured **chat-message filter** just matched. Brief. | `chat` |
 | 7 | `AFK_WARNING` | Idle past **AFK warning threshold** (`afkWarningThresholdTicks`, default 60 ticks ≈ 36 s). | `afk_warning` |
 | 8 | `BANKING` | Bank interface open. Sits above combat so banking is never misread as combat. | `banking` |
 | 9 | `COMBAT` | **Real combat only:** a hitsplat lands on you, or you deal one to your target. Gated by "React to combat". | `combat` (+ style, see 7.2) |

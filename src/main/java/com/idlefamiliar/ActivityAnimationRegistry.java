@@ -79,6 +79,24 @@ public class ActivityAnimationRegistry
 		"_NO_ITEMS"   // nothing-to-work-on pose (e.g. HUMAN_FLETCHING_NO_ITEMS)
 	);
 
+	/**
+	 * Sailing salvaging plays a dedicated player animation, but — unlike the skills
+	 * in {@link #SKILL_PREFIXES} — it has no clean {@code HUMAN_*} stem: the IDs are
+	 * boat/tool specific and there is an interim "reset" animation between salvage
+	 * rolls (see RuneLite issue #19613). So the salvage animations are whitelisted
+	 * explicitly here rather than by prefix.
+	 *
+	 * <p>Fill in the animation id(s) your client plays <em>while actively
+	 * salvaging</em> (read them from RuneLite dev-mode's Animation overlay, or the
+	 * plugin's own anim debug log). You do NOT need to list the brief "reset" /
+	 * standing pose between rolls — the skilling linger bridges those gaps, so the
+	 * avatar stays on {@code sailing_loop} for the whole salvage session. If you DO
+	 * list a reset id, the avatar will read as Sailing during the reset too.
+	 */
+	private static final int[] SAILING_SALVAGE_ANIMATIONS = {
+		13584,   // salvaging hook pull (captured from the client debug log while salvaging)
+	};
+
 	private final Map<Integer, String> activityByAnimation;
 	private final Set<Integer> teleportAnimations;
 
@@ -211,6 +229,13 @@ public class ActivityAnimationRegistry
 		// Spellbook / jewellery teleport casts (individually named constants).
 		teleports.add(AnimationID.HUMAN_CASTTELEPORT);
 		teleports.add(AnimationID.HUMAN_CAST2_TELEPORT);
+
+		// Sailing salvaging — explicit whitelist (no clean HUMAN_* stem; see the
+		// SAILING_SALVAGE_ANIMATIONS doc). put (not putIfAbsent) so these win.
+		for (int salvageAnimation : SAILING_SALVAGE_ANIMATIONS)
+		{
+			byAnimation.put(salvageAnimation, "Sailing");
+		}
 
 		return new ActivityAnimationRegistry(
 			Collections.unmodifiableMap(byAnimation),

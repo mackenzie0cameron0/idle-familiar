@@ -27,6 +27,7 @@ public enum AvatarPreview
 	TELEPORTING("Teleporting", AvatarState.TELEPORTING, ""),
 	GRAND_EXCHANGE("Grand Exchange", AvatarState.GRAND_EXCHANGE, ""),
 	BANKING("Banking", AvatarState.BANKING, ""),
+	CHAT_NOTIFICATION("Chat notification", AvatarState.CUSTOM_EVENT, ""),
 	LOGGED_OUT("Logged out", AvatarState.LOGGED_OUT, ""),
 	SKILLING("Skilling (generic)", AvatarState.SKILLING, ""),
 	WOODCUTTING("Skill: Woodcutting", AvatarState.SKILLING, "Woodcutting"),

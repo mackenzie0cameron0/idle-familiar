@@ -3,10 +3,16 @@ package com.idlefamiliar;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
+import java.awt.Color;
+import java.awt.Graphics2D;
+import java.awt.image.BufferedImage;
+import java.io.File;
+import java.nio.file.Files;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Random;
+import javax.imageio.ImageIO;
 import org.junit.Test;
 
 public class AnimationControllerVariantTest
@@ -64,6 +70,35 @@ public class AnimationControllerVariantTest
 		WeightedVariantPicker picker = controller.buildVariantPicker("inventory_full");
 		assertNotNull(picker);
 		assertTrue(picker.variantCount() == 1);
+	}
+
+	@Test
+	public void externalPrimaryDoesNotHideBundledVariants() throws Exception
+	{
+		// An external drop-in folder that overrides ONLY the primary sheet must not
+		// suppress the bundled numbered variants. Regression test for variant
+		// discovery being scoped to wherever the primary resolved: dropping a custom
+		// fishing_loop.png into the drop-in folder used to drop the picker to a single
+		// entry, so the avatar played only the primary and never fishing_loop_2..9.
+		File dir = Files.createTempDirectory("if-avatar-ext-primary").toFile();
+		BufferedImage sheet = new BufferedImage(64, 64, BufferedImage.TYPE_INT_ARGB);
+		Graphics2D graphics = sheet.createGraphics();
+		graphics.setColor(Color.RED);
+		graphics.fillRect(0, 0, 64, 64);
+		graphics.dispose();
+		ImageIO.write(sheet, "png", new File(dir, "fishing_loop.png")); // primary only
+
+		AnimationController controller = new AnimationController(new Random(1));
+		controller.setExternalAssetDir(dir);
+		controller.loadDefaultAnimations();
+
+		WeightedVariantPicker picker = controller.buildVariantPicker("fishing_loop");
+		assertNotNull(picker);
+		// fishing_loop (external) + the bundled fishing_loop_2..9 = 9 total.
+		assertTrue("external primary must not hide bundled variants, got "
+			+ picker.variantCount(), picker.variantCount() >= 9);
+		assertTrue(picker.variantNames().containsAll(Arrays.asList(
+			"fishing_loop", "fishing_loop_4", "fishing_loop_9")));
 	}
 
 	@Test

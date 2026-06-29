@@ -22,6 +22,10 @@ public class AnimationControllerTest
 		assertEquals("running", controller.resolveAssetName(AvatarState.RUNNING, ""));
 		assertEquals("teleporting", controller.resolveAssetName(AvatarState.TELEPORTING, ""));
 		assertEquals("grand_exchange", controller.resolveAssetName(AvatarState.GRAND_EXCHANGE, ""));
+		// A matched chat-message filter resolves to its own sheet, NOT the generic
+		// "active" reaction, so the chat_loop.png art plays on a chat trigger.
+		assertEquals("chat", controller.resolveAssetName(AvatarState.CUSTOM_EVENT, ""));
+		assertEquals("active", controller.resolveAssetName(AvatarState.PLAYER_ACTIVE, ""));
 	}
 
 	@Test

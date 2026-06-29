@@ -6,7 +6,7 @@ $ErrorActionPreference = "Stop"
 
 $Proj   = $PSScriptRoot
 $Cache  = Join-Path $env:USERPROFILE ".gradle\caches\modules-2"
-$Out    = Join-Path $Proj "build\launch"
+$Out    = Join-Path $Proj "hbuild\launch"
 $Res    = Join-Path $Proj "src\main\resources"
 
 # --- JDK (need 17+ for the cached RuneLite; the gradle-managed Adoptium 21 fits) ---

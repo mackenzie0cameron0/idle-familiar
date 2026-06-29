@@ -341,10 +341,25 @@ public class IdleFamiliarPlugin extends Plugin
 			return;
 		}
 		int anim = localPlayer.getAnimation();
-		log.info("[idle-familiar] tick={} anim={} regLabel={} moved={} skilling={} sustained={} state={} label={}",
+		// Interaction target: decisive for whether target-sustain can engage. If this
+		// reads "none" while salvaging, the hook/shipwreck is a game object (not an
+		// Actor) and getInteracting() can't see it — target-sustain needs a different
+		// signal. If it names an NPC, whitelisting the salvage anim id below is enough.
+		net.runelite.api.Actor interacting = localPlayer.getInteracting();
+		String interactingDesc = "none";
+		if (interacting != null)
+		{
+			interactingDesc = interacting.getName()
+				+ (interacting instanceof net.runelite.api.NPC
+					? " npcId=" + ((net.runelite.api.NPC) interacting).getId()
+					: "")
+				+ " token=" + System.identityHashCode(interacting);
+		}
+		log.info("[idle-familiar] tick={} anim={} regLabel={} interacting=[{}] moved={} skilling={} sustained={} state={} label={}",
 			idleStateTracker.getCurrentTick(),
 			anim,
 			activityRegistry.getActivityForAnimation(anim).orElse("-"),
+			interactingDesc,
 			movedThisTick,
 			activityService.isSkilling(),
 			skillingTracker.isSustainedByTarget(),

@@ -163,7 +163,7 @@ public class AnimationController
 		load(AvatarState.LOW_HEALTH, "low_health");
 		load(AvatarState.LOW_PRAYER, "low_prayer");
 		load(AvatarState.LOGGED_OUT, "logged_out");
-		load(AvatarState.CUSTOM_EVENT, "active");
+		load(AvatarState.CUSTOM_EVENT, "chat");
 	}
 
 	public BufferedImage getFrame(AvatarState state)
@@ -457,8 +457,11 @@ public class AnimationController
 		switch (state)
 		{
 			case PLAYER_ACTIVE:
-			case CUSTOM_EVENT:
 				return "active";
+			// A matched chat-message filter shows its own sheet (chat_loop.png), falling
+			// back to idle if absent — distinct from the generic "active" reaction.
+			case CUSTOM_EVENT:
+				return "chat";
 			case AFK_WARNING:
 				return "afk_warning";
 			case DEATH:
@@ -508,11 +511,19 @@ public class AnimationController
 	{
 		List<String> found = new ArrayList<>();
 		found.add(primaryBase); // the primary sheet is always a variant
-		boolean primaryIsExternal = externalAssetExists(primaryBase + ".png");
+		// Discover variants in BOTH the external drop-in folder AND the bundled
+		// resources (assetExists checks external first, then bundled). Discovery
+		// must NOT be scoped to wherever the primary happened to resolve: a user
+		// who overrides only the primary externally (e.g. drops a custom
+		// fishing_loop.png into the drop-in folder) would otherwise hide every
+		// bundled fishing_loop_2..9, leaving the avatar stuck on the single primary
+		// sheet. The loader still prefers an external sheet over the bundled one per
+		// file (see openAsset), so an external variant continues to win when both
+		// exist.
 		for (String suffix : new String[]{"uncommon", "rare"})
 		{
 			String candidate = primaryBase + "_" + suffix;
-			if (variantExists(candidate + ".png", primaryIsExternal))
+			if (assetExists(candidate + ".png"))
 			{
 				found.add(candidate);
 			}
@@ -520,17 +531,12 @@ public class AnimationController
 		for (int i = 2; i <= 9; i++)
 		{
 			String candidate = primaryBase + "_" + i;
-			if (variantExists(candidate + ".png", primaryIsExternal))
+			if (assetExists(candidate + ".png"))
 			{
 				found.add(candidate);
 			}
 		}
 		return found;
-	}
-
-	private boolean variantExists(String fileName, boolean primaryIsExternal)
-	{
-		return primaryIsExternal ? externalAssetExists(fileName) : assetExists(fileName);
 	}
 
 	/**

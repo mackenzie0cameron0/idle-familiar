@@ -6,5 +6,15 @@
   "idle_loop_4": 12,
   "idle_loop_5": 12,
   "idle_loop_6": 12,
-  "idle_loop_7": 12
+  "idle_loop_7": 12,
+
+  "fishing_loop": 50,
+  "fishing_loop_2": 12,
+  "fishing_loop_3": 12,
+  "fishing_loop_4": 12,
+  "fishing_loop_5": 12,
+  "fishing_loop_6": 12,
+  "fishing_loop_7": 12,
+  "fishing_loop_8": 12,
+  "fishing_loop_9": 12
 }

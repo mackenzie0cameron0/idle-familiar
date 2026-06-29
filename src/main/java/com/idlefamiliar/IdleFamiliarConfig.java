@@ -435,7 +435,7 @@ public interface IdleFamiliarConfig extends Config
 	)
 	default String chatMessageFilters()
 	{
-		return "# some cracks around the cave begin to ooze water.";
+		return "some cracks around the cave begin to ooze water.";
 	}
 
 	// --- Detection ---------------------------------------------------------

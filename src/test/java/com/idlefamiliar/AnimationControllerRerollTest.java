@@ -27,12 +27,20 @@ public class AnimationControllerRerollTest
 	public void setUp() throws Exception
 	{
 		dir = Files.createTempDirectory("if-reroll").toFile();
-		// Two multi-frame "active" variants (128x64 -> 2 frames each), distinct colours.
+		// Multi-frame "active" variants (128x64 -> 2 frames each), distinct colours.
+		// The bundled resources ship active_loop_2.png AND active_loop_3.png, and
+		// variant discovery intentionally MERGES bundled variants with the external
+		// drop-in (see AnimationController.discoverVariants / the
+		// externalPrimaryDoesNotHideBundledVariants test). So to keep this test's
+		// "active" variant set fully under its own control, override every bundled
+		// active_loop_N here — otherwise a bundled sheet (whose corner is transparent)
+		// can be picked and the colour assertion below would see neither test colour.
 		writeSheet("active_loop.png", Color.RED);
 		writeSheet("active_loop_2.png", Color.BLUE);
-		// Equal odds so both surface quickly.
+		writeSheet("active_loop_3.png", Color.GREEN);
+		// Equal odds so the variants surface quickly.
 		Files.write(new File(dir, "weights.json").toPath(),
-			"{\"active_loop\":1,\"active_loop_2\":1}".getBytes());
+			"{\"active_loop\":1,\"active_loop_2\":1,\"active_loop_3\":1}".getBytes());
 	}
 
 	private void writeSheet(String name, Color color) throws Exception
@@ -94,10 +102,10 @@ public class AnimationControllerRerollTest
 		BufferedImage frame = controller.getFrameAt(AvatarState.PLAYER_ACTIVE, "", 1200L);
 
 		int rgb = frame.getRGB(0, 0);
-		assertTrue("active frame must be one of its two variants",
-			rgb == Color.RED.getRGB() || rgb == Color.BLUE.getRGB());
+		assertTrue("active frame must be one of its variants",
+			rgb == Color.RED.getRGB() || rgb == Color.BLUE.getRGB() || rgb == Color.GREEN.getRGB());
 		String variant = controller.currentVariantName();
 		assertTrue("variant must be one of the active sheets",
-			"active_loop".equals(variant) || "active_loop_2".equals(variant));
+			"active_loop".equals(variant) || "active_loop_2".equals(variant) || "active_loop_3".equals(variant));
 	}
 }

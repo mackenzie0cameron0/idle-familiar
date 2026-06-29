@@ -38,6 +38,12 @@ for %%i in ("%APP_HOME%") do set APP_HOME=%%~fi
 @rem Add default JVM options here. You can also use JAVA_OPTS and GRADLE_OPTS to pass JVM options to this script.
 set DEFAULT_JVM_OPTS="-Xmx64m" "-Xms64m"
 
+@rem Gradle 9 needs Java 17+. Prefer Gradle's managed Adoptium JDK when present,
+@rem because this machine's JAVA_HOME can still point at Java 11.
+for /d %%J in ("%USERPROFILE%\.gradle\jdks\eclipse_adoptium-*-amd64-windows*") do (
+    if exist "%%~fJ\bin\java.exe" set JAVA_HOME=%%~fJ
+)
+
 @rem Find java.exe
 if defined JAVA_HOME goto findJavaFromJavaHome
 
