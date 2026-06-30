@@ -1,15 +1,11 @@
 package com.idlefamiliar;
 
-import java.lang.reflect.Field;
-import java.lang.reflect.Modifier;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import net.runelite.api.gameval.AnimationID;
 
 /**
  * Maps an in-game animation ID to the skilling activity it represents, replacing
@@ -17,84 +13,273 @@ import net.runelite.api.gameval.AnimationID;
  * false positives (e.g. the fishing loop replaying while walking to a bank).
  *
  * <h2>How the whitelist is built</h2>
- * The registry is built once at startup by reflecting over
- * {@link net.runelite.api.gameval.AnimationID} and matching the named animation
- * constants by name prefix. This intentionally diverges from the original design
- * sketch, which assumed a clean {@code HUMAN_<SKILL>_*} namespace for every
- * skill. In the real gameval data ({@code RuneLite 1.12.x}) animation constants
- * are named by tool/action, not by skill: only a subset of skills expose a clean,
- * unambiguous {@code HUMAN_*} family that can be whitelisted without dragging in
- * unrelated animations.
+ * The animation IDs below are an explicit, hard-coded whitelist. They were
+ * originally discovered by sweeping the {@code HUMAN_<skill>*} families in
+ * {@link net.runelite.api.gameval.AnimationID} by name prefix, then frozen as
+ * literals here. (An earlier revision performed that sweep at runtime via Java
+ * reflection; the RuneLite Plugin Hub forbids reflection, so the result is baked
+ * in instead.) Each entry carries its source {@code AnimationID} constant name
+ * as a comment for traceability. Adding a tool tier or new variant now means
+ * adding its line here, rather than it being picked up automatically.
  *
- * <p>Those clean families are whitelisted here (see {@link #SKILL_PREFIXES}).
- * Reflecting over the family — rather than hard-coding individual IDs — means
- * every tool tier and special variant (bronze → crystal/infernal/3a, wall and
- * no-reach-forward poses, Zalcano/Gauntlet skins, …) is covered automatically,
- * and newly added variants are picked up for free on a RuneLite bump.
- *
- * <p>Combat (Attack/Strength/Defence/Slayer), Ranged, Magic, Hunter, Firemaking,
- * Construction, Agility and other skills have no clean animation namespace, so
- * they are deliberately <em>not</em> driven by this registry. Their skilling
- * label continues to come from the authoritative XP-drop signal
- * ({@code onStatChanged}); see {@link IdleFamiliarPlugin}. An animation absent
- * from every set returns {@link Optional#empty()} — no signal, no linger refresh —
- * so emotes, eating, drinking and teleport wind-ups are silently ignored.
+ * <p>Only skills with a clean, unambiguous animation namespace are listed
+ * (Woodcutting, Mining, Fishing, Smithing, Fletching, Herblore, Cooking,
+ * Runecraft, Farming, Thieving). Combat, Ranged, Magic, Hunter, Firemaking,
+ * Construction, Agility and others have no clean animation namespace, so their
+ * skilling label comes from the authoritative XP-drop signal ({@code
+ * onStatChanged}) in {@link IdleFamiliarPlugin} instead. Non-active poses
+ * (idle/enter/no-items) were excluded during the sweep, so an animation absent
+ * from every set returns {@link Optional#empty()} — emotes, eating, drinking
+ * and teleport wind-ups are silently ignored.
  */
 public class ActivityAnimationRegistry
 {
-	/**
-	 * Animation-constant name prefix &rarr; activity label, in match priority
-	 * order (first matching prefix wins). Every prefix below is start-anchored and
-	 * verified to contain only animations belonging to that one skill.
-	 */
-	private static final Map<String, String> SKILL_PREFIXES = buildSkillPrefixes();
+	private static final int[] WOODCUTTING_ANIMATIONS = {
+		7264, // HUMAN_WOODCUTTING_3A_AXE
+		869, // HUMAN_WOODCUTTING_ADAMANT_AXE
+		873, // HUMAN_WOODCUTTING_BLACK_AXE
+		5383, // HUMAN_WOODCUTTING_BLESSED_AXE
+		5384, // HUMAN_WOODCUTTING_BLESSED_AXE_MISS
+		879, // HUMAN_WOODCUTTING_BRONZE_AXE
+		8324, // HUMAN_WOODCUTTING_CRYSTAL_AXE
+		13870, // HUMAN_WOODCUTTING_DEMONIC_PACT
+		2846, // HUMAN_WOODCUTTING_DRAGON_AXE
+		8325, // HUMAN_WOODCUTTING_GAUNTLET_AXE_HM
+		8303, // HUMAN_WOODCUTTING_GILDED_AXE
+		2117, // HUMAN_WOODCUTTING_INFERNAL_AXE
+		877, // HUMAN_WOODCUTTING_IRON_AXE
+		12025, // HUMAN_WOODCUTTING_LEAGUE_AXE
+		871, // HUMAN_WOODCUTTING_MITHRIL_AXE
+		867, // HUMAN_WOODCUTTING_RUNE_AXE
+		875, // HUMAN_WOODCUTTING_STEEL_AXE
+		12026, // HUMAN_WOODCUTTING_TRAILBLAZER_AXE
+		24, // HUMAN_WOODCUTTING_TRAILBLAZER_AXE_NO_INFERNAL
+		11939, // HUMAN_WOODCUTTING_TRAILBLAZER_RELOADED_AXE
+		11940, // HUMAN_WOODCUTTING_TRAILBLAZER_RELOADED_AXE_NO_INFERNAL
+	};
+	private static final int[] MINING_ANIMATIONS = {
+		7283, // HUMAN_MINING_3A_PICKAXE
+		7284, // HUMAN_MINING_3A_PICKAXE_NOREACHFORWARD
+		7282, // HUMAN_MINING_3A_PICKAXE_WALL
+		628, // HUMAN_MINING_ADAMANT_PICKAXE
+		6750, // HUMAN_MINING_ADAMANT_PICKAXE_NOREACHFORWARD
+		6756, // HUMAN_MINING_ADAMANT_PICKAXE_WALL
+		3873, // HUMAN_MINING_BLACK_PICKAXE
+		6108, // HUMAN_MINING_BLACK_PICKAXE_NOREACHFORWARD
+		3866, // HUMAN_MINING_BLACK_PICKAXE_WALL
+		625, // HUMAN_MINING_BRONZE_PICKAXE
+		6747, // HUMAN_MINING_BRONZE_PICKAXE_NOREACHFORWARD
+		6753, // HUMAN_MINING_BRONZE_PICKAXE_WALL
+		8347, // HUMAN_MINING_CRYSTAL_PICKAXE
+		8350, // HUMAN_MINING_CRYSTAL_PICKAXE_NOREACHFORWARD
+		8345, // HUMAN_MINING_CRYSTAL_PICKAXE_WALL
+		13869, // HUMAN_MINING_DEMONIC_PACT
+		7139, // HUMAN_MINING_DRAGON_PICKAXE
+		7140, // HUMAN_MINING_DRAGON_PICKAXE_NOREACHFORWARD
+		642, // HUMAN_MINING_DRAGON_PICKAXE_PRETTY
+		643, // HUMAN_MINING_DRAGON_PICKAXE_PRETTY_NOREACHFORWARD
+		335, // HUMAN_MINING_DRAGON_PICKAXE_PRETTY_WALL
+		6758, // HUMAN_MINING_DRAGON_PICKAXE_WALL
+		8348, // HUMAN_MINING_GAUNTLET_PICKAXE_HM
+		8313, // HUMAN_MINING_GILDED_PICKAXE
+		8314, // HUMAN_MINING_GILDED_PICKAXE_NOREACHFORWARD
+		8312, // HUMAN_MINING_GILDED_PICKAXE_WALL
+		9485, // HUMAN_MINING_HET_3A_PICKAXE
+		9478, // HUMAN_MINING_HET_ADAMANT_PICKAXE
+		9475, // HUMAN_MINING_HET_BLACK_PICKAXE
+		9473, // HUMAN_MINING_HET_BRONZE_PICKAXE
+		9486, // HUMAN_MINING_HET_CRYSTAL_PICKAXE
+		9481, // HUMAN_MINING_HET_DRAGON_PICKAXE
+		9482, // HUMAN_MINING_HET_DRAGON_PICKAXE_PRETTY
+		9480, // HUMAN_MINING_HET_GILDED_PICKAXE
+		9484, // HUMAN_MINING_HET_INFERNAL_PICKAXE
+		9474, // HUMAN_MINING_HET_IRON_PICKAXE
+		9487, // HUMAN_MINING_HET_LEAGUE_TRAILBLAZER_PICKAXE
+		9477, // HUMAN_MINING_HET_MITHRIL_PICKAXE
+		9479, // HUMAN_MINING_HET_RUNE_PICKAXE
+		9476, // HUMAN_MINING_HET_STEEL_PICKAXE
+		11834, // HUMAN_MINING_HET_TRAILBLAZER_PICKAXE
+		9488, // HUMAN_MINING_HET_TRAILBLAZER_PICKAXE_NO_INFERNAL
+		11835, // HUMAN_MINING_HET_TRAILBLAZER_RELOADED_PICKAXE
+		11836, // HUMAN_MINING_HET_TRAILBLAZER_RELOADED_PICKAXE_NO_INFERNAL
+		9483, // HUMAN_MINING_HET_ZALCANO_PICKAXE
+		4482, // HUMAN_MINING_INFERNAL_PICKAXE
+		4483, // HUMAN_MINING_INFERNAL_PICKAXE_NOREACHFORWARD
+		4481, // HUMAN_MINING_INFERNAL_PICKAXE_WALL
+		626, // HUMAN_MINING_IRON_PICKAXE
+		6748, // HUMAN_MINING_IRON_PICKAXE_NOREACHFORWARD
+		6754, // HUMAN_MINING_IRON_PICKAXE_WALL
+		8787, // HUMAN_MINING_LEAGUE_TRAILBLAZER_PICKAXE
+		8788, // HUMAN_MINING_LEAGUE_TRAILBLAZER_PICKAXE_NOREACHFORWARD
+		8786, // HUMAN_MINING_LEAGUE_TRAILBLAZER_PICKAXE_WALL
+		629, // HUMAN_MINING_MITHRIL_PICKAXE
+		6751, // HUMAN_MINING_MITHRIL_PICKAXE_NOREACHFORWARD
+		6757, // HUMAN_MINING_MITHRIL_PICKAXE_WALL
+		624, // HUMAN_MINING_RUNE_PICKAXE
+		6746, // HUMAN_MINING_RUNE_PICKAXE_NOREACHFORWARD
+		6752, // HUMAN_MINING_RUNE_PICKAXE_WALL
+		627, // HUMAN_MINING_STEEL_PICKAXE
+		6749, // HUMAN_MINING_STEEL_PICKAXE_NOREACHFORWARD
+		6755, // HUMAN_MINING_STEEL_PICKAXE_WALL
+		11831, // HUMAN_MINING_TRAILBLAZER_PICKAXE
+		11837, // HUMAN_MINING_TRAILBLAZER_PICKAXE_NOREACHFORWARD
+		8887, // HUMAN_MINING_TRAILBLAZER_PICKAXE_NO_INFERNAL
+		8888, // HUMAN_MINING_TRAILBLAZER_PICKAXE_NO_INFERNAL_NOREACHFORWARD
+		8886, // HUMAN_MINING_TRAILBLAZER_PICKAXE_NO_INFERNAL_WALL
+		11825, // HUMAN_MINING_TRAILBLAZER_PICKAXE_WALL
+		11832, // HUMAN_MINING_TRAILBLAZER_RELOADED_PICKAXE
+		11838, // HUMAN_MINING_TRAILBLAZER_RELOADED_PICKAXE_NOREACHFORWARD
+		11833, // HUMAN_MINING_TRAILBLAZER_RELOADED_PICKAXE_NO_INFERNAL
+		11839, // HUMAN_MINING_TRAILBLAZER_RELOADED_PICKAXE_NO_INFERNAL_NOREACHFORWARD
+		11827, // HUMAN_MINING_TRAILBLAZER_RELOADED_PICKAXE_NO_INFERNAL_WALL
+		11826, // HUMAN_MINING_TRAILBLAZER_RELOADED_PICKAXE_WALL
+		8363, // HUMAN_MINING_ZALCANO_3A_PICKAXE
+		8356, // HUMAN_MINING_ZALCANO_ADAMANT_PICKAXE
+		8353, // HUMAN_MINING_ZALCANO_BLACK_PICKAXE
+		8351, // HUMAN_MINING_ZALCANO_BRONZE_PICKAXE
+		8364, // HUMAN_MINING_ZALCANO_CRYSTAL_PICKAXE
+		8359, // HUMAN_MINING_ZALCANO_DRAGON_PICKAXE
+		8360, // HUMAN_MINING_ZALCANO_DRAGON_PICKAXE_PRETTY
+		8358, // HUMAN_MINING_ZALCANO_GILDED_PICKAXE
+		8362, // HUMAN_MINING_ZALCANO_INFERNAL_PICKAXE
+		8352, // HUMAN_MINING_ZALCANO_IRON_PICKAXE
+		8789, // HUMAN_MINING_ZALCANO_LEAGUE_TRAILBLAZER_PICKAXE
+		8355, // HUMAN_MINING_ZALCANO_MITHRIL_PICKAXE
+		8346, // HUMAN_MINING_ZALCANO_PICKAXE
+		8349, // HUMAN_MINING_ZALCANO_PICKAXE_NOREACHFORWARD
+		8344, // HUMAN_MINING_ZALCANO_PICKAXE_WALL
+		8357, // HUMAN_MINING_ZALCANO_RUNE_PICKAXE
+		8354, // HUMAN_MINING_ZALCANO_STEEL_PICKAXE
+		11840, // HUMAN_MINING_ZALCANO_TRAILBLAZER_PICKAXE
+		8889, // HUMAN_MINING_ZALCANO_TRAILBLAZER_PICKAXE_NO_INFERNAL
+		11841, // HUMAN_MINING_ZALCANO_TRAILBLAZER_RELOADED_PICKAXE
+		11842, // HUMAN_MINING_ZALCANO_TRAILBLAZER_RELOADED_PICKAXE_NO_INFERNAL
+		8361, // HUMAN_MINING_ZALCANO_ZALCANO_PICKAXE
+	};
+	private static final int[] FISHING_ANIMATIONS = {
+		622, // HUMAN_FISHING_CASTING
+		9349, // HUMAN_FISHING_CASTING_BRUT
+		11745, // HUMAN_FISHING_CASTING_NPC
+		8188, // HUMAN_FISHING_CASTING_PEARL
+		8190, // HUMAN_FISHING_CASTING_PEARL_BRUT
+		8189, // HUMAN_FISHING_CASTING_PEARL_FLY
+		6932, // HUMAN_FISHING_CASTING_PEARL_OILY
+		9350, // HUMAN_FISHING_ONSPOT_BRUT
+		623, // HUMAN_FISH_ONSPOT
+		8191, // HUMAN_FISH_ONSPOT_PEARL
+		8193, // HUMAN_FISH_ONSPOT_PEARL_BRUT
+		8192, // HUMAN_FISH_ONSPOT_PEARL_FLY
+		7203, // HUMAN_FISH_ONSPOT_PEARL_OILY
+		618, // HUMAN_HARPOON
+		5108, // HUMAN_HARPOON_BARBED
+		8336, // HUMAN_HARPOON_CRYSTAL
+		7401, // HUMAN_HARPOON_DRAGON
+		8337, // HUMAN_HARPOON_GAUNTLET_HM
+		7402, // HUMAN_HARPOON_INFERNAL
+		8784, // HUMAN_HARPOON_LEAGUE_TRAILBLAZER
+		8783, // HUMAN_HARPOON_TRAILBLAZER
+		88, // HUMAN_HARPOON_TRAILBLAZER_NO_INFERNAL
+		11867, // HUMAN_HARPOON_TRAILBLAZER_RELOADED
+		11868, // HUMAN_HARPOON_TRAILBLAZER_RELOADED_NO_INFERNAL
+		620, // HUMAN_LARGENET
+		11042, // HUMAN_LARGENET_LOOPING
+		621, // HUMAN_SMALLNET
+	};
+	private static final int[] SMITHING_ANIMATIONS = {
+		898, // HUMAN_SMITHING
+		8911, // HUMAN_SMITHING_IMCANDO_HAMMER
+		8894, // HUMAN_SMITHING_NOREPLACE
+	};
+	private static final int[] FLETCHING_ANIMATIONS = {
+		1248, // HUMAN_FLETCHING
+		8480, // HUMAN_FLETCHING_ADD_ARROW_TIPS
+		8469, // HUMAN_FLETCHING_ADD_BOLT_FEATHERS_ADAMANT
+		8466, // HUMAN_FLETCHING_ADD_BOLT_FEATHERS_BLURITE
+		8463, // HUMAN_FLETCHING_ADD_BOLT_FEATHERS_BRONZE
+		8471, // HUMAN_FLETCHING_ADD_BOLT_FEATHERS_DRAGON
+		8464, // HUMAN_FLETCHING_ADD_BOLT_FEATHERS_IRON
+		8468, // HUMAN_FLETCHING_ADD_BOLT_FEATHERS_MITHRIL
+		8470, // HUMAN_FLETCHING_ADD_BOLT_FEATHERS_RUNE
+		8465, // HUMAN_FLETCHING_ADD_BOLT_FEATHERS_SILVER
+		8467, // HUMAN_FLETCHING_ADD_BOLT_FEATHERS_STEEL
+		8477, // HUMAN_FLETCHING_ADD_BOLT_TIPS_ADAMANT
+		8474, // HUMAN_FLETCHING_ADD_BOLT_TIPS_BLURITE
+		8472, // HUMAN_FLETCHING_ADD_BOLT_TIPS_BRONZE
+		8479, // HUMAN_FLETCHING_ADD_BOLT_TIPS_DRAGON
+		8473, // HUMAN_FLETCHING_ADD_BOLT_TIPS_IRON
+		8476, // HUMAN_FLETCHING_ADD_BOLT_TIPS_MITHRIL
+		8478, // HUMAN_FLETCHING_ADD_BOLT_TIPS_RUNE
+		8475, // HUMAN_FLETCHING_ADD_BOLT_TIPS_STEEL
+		8486, // HUMAN_FLETCHING_ADD_DART_FEATHERS_ADAMANT
+		9108, // HUMAN_FLETCHING_ADD_DART_FEATHERS_AMETHYST
+		8482, // HUMAN_FLETCHING_ADD_DART_FEATHERS_BRONZE
+		8488, // HUMAN_FLETCHING_ADD_DART_FEATHERS_DRAGON
+		8483, // HUMAN_FLETCHING_ADD_DART_FEATHERS_IRON
+		8485, // HUMAN_FLETCHING_ADD_DART_FEATHERS_MITHRIL
+		8487, // HUMAN_FLETCHING_ADD_DART_FEATHERS_RUNE
+		8484, // HUMAN_FLETCHING_ADD_DART_FEATHERS_STEEL
+		8481, // HUMAN_FLETCHING_ADD_FEATHER
+		5244, // HUMAN_FLETCHING_HUNTINGBOLTS
+		11097, // HUMAN_FLETCHING_HUNTINGBOLTS_CHISEL
+		11098, // HUMAN_FLETCHING_HUNTINGBOLTS_CHISEL_SINGLE
+		13150, // HUMAN_FLETCHING_HUNTINGBOLTS_CHISEL_SINGLE_QUICK
+		11096, // HUMAN_FLETCHING_HUNTINGBOLTS_SINGLE
+		11524, // HUMAN_FLETCHING_NOXIOUS_HALBERD
+		11100, // HUMAN_FLETCHING_SINGLE
+		12329, // HUMAN_FLETCHING_SINGLE_ROCK_SHARD
+	};
+	private static final int[] HERBLORE_ANIMATIONS = {
+		364, // HUMAN_HERBING_GRIND
+		7319, // HUMAN_HERBING_GRIND_NPC
+		11095, // HUMAN_HERBING_GRIND_RESTART
+		363, // HUMAN_HERBING_VIAL
+		11094, // HUMAN_HERBING_VIAL_RESTART
+	};
+	private static final int[] COOKING_ANIMATIONS = {
+		896, // HUMAN_COOKING
+		11735, // HUMAN_COOKING_LOOP
+		10795, // HUMAN_COOKING_WALKMERGE_NORESTART
+		897, // HUMAN_FIRECOOKING
+	};
+	private static final int[] RUNECRAFT_ANIMATIONS = {
+		791, // HUMAN_RUNECRAFT
+		9361, // HUMAN_RUNECRAFT_WALKMERGE
+	};
+	private static final int[] FARMING_ANIMATIONS = {
+		1728, // HUMAN_FARMING
+	};
+	private static final int[] THIEVING_ANIMATIONS = {
+		881, // HUMAN_PICKPOCKET
+	};
 
 	/**
-	 * Field-name prefix identifying player teleport animation frames. Covers the
-	 * standard Lumbridge home-teleport casting sequence
-	 * ({@code HOME_TELEPORT_HUMAN_*}). Spellbook/jewellery teleports are added
-	 * explicitly below since they are individually named.
+	 * Player teleport animations: the Lumbridge home-teleport casting sequence
+	 * ({@code HOME_TELEPORT_HUMAN_*}) plus the individually named spellbook /
+	 * jewellery teleport casts.
 	 */
-	private static final String HOME_TELEPORT_PREFIX = "HOME_TELEPORT_HUMAN";
+	private static final int[] TELEPORT_ANIMATIONS = {
+		11875, // HOME_TELEPORT_HUMAN_ECHOES_1
+		11876, // HOME_TELEPORT_HUMAN_ECHOES_2
+		11877, // HOME_TELEPORT_HUMAN_ECHOES_3
+		11878, // HOME_TELEPORT_HUMAN_ECHOES_4
+		11879, // HOME_TELEPORT_HUMAN_ECHOES_5
+		8811, // HOME_TELEPORT_HUMAN_FIRE_1
+		8812, // HOME_TELEPORT_HUMAN_FIRE_2
+		8813, // HOME_TELEPORT_HUMAN_FIRE_3
+		8815, // HOME_TELEPORT_HUMAN_FIRE_4
+		8817, // HOME_TELEPORT_HUMAN_FIRE_5
+		714, // HUMAN_CASTTELEPORT
+		793, // HUMAN_CAST2_TELEPORT
+	};
 
 	/**
-	 * Name suffixes that mark a <em>non-active</em> pose inside an otherwise
-	 * whitelisted skill family. The prefix sweep is name-based and necessarily
-	 * greedy, so it would otherwise pull in standing-at-station / wind-up /
-	 * nothing-to-do poses that share a skill's stem but are not active skilling:
-	 * e.g. {@code HUMAN_SMITHING_IDLE} (standing at the anvil), {@code
-	 * HUMAN_SMITHING_ENTER} (stepping up to it) and {@code HUMAN_FLETCHING_NO_ITEMS}
-	 * (the "nothing left to fletch" pose). Treating those as active skilling makes
-	 * the avatar keep skilling while the player is, in fact, idle — a false positive
-	 * that also lengthens the apparent activity tail.
-	 *
-	 * <p>Excluding by suffix token rather than by hard-coded ID keeps the registry
-	 * self-maintaining: a future RuneLite bump that adds, say, {@code
-	 * HUMAN_COOKING_IDLE} is filtered automatically. Matched with
-	 * {@code name.endsWith(token)} after a skill prefix matches.
-	 */
-	private static final Set<String> EXCLUDED_POSE_SUFFIXES = Set.of(
-		"_IDLE",      // standing-idle pose at a station (e.g. HUMAN_SMITHING_IDLE)
-		"_ENTER",     // walk-up / enter pose (e.g. HUMAN_SMITHING_ENTER)
-		"_NO_ITEMS"   // nothing-to-work-on pose (e.g. HUMAN_FLETCHING_NO_ITEMS)
-	);
-
-	/**
-	 * Sailing salvaging plays a dedicated player animation, but — unlike the skills
-	 * in {@link #SKILL_PREFIXES} — it has no clean {@code HUMAN_*} stem: the IDs are
-	 * boat/tool specific and there is an interim "reset" animation between salvage
-	 * rolls (see RuneLite issue #19613). So the salvage animations are whitelisted
-	 * explicitly here rather than by prefix.
-	 *
-	 * <p>Fill in the animation id(s) your client plays <em>while actively
-	 * salvaging</em> (read them from RuneLite dev-mode's Animation overlay, or the
-	 * plugin's own anim debug log). You do NOT need to list the brief "reset" /
-	 * standing pose between rolls — the skilling linger bridges those gaps, so the
-	 * avatar stays on {@code sailing_loop} for the whole salvage session. If you DO
-	 * list a reset id, the avatar will read as Sailing during the reset too.
+	 * Sailing salvaging plays a dedicated player animation with no clean
+	 * {@code HUMAN_*} stem, so it is whitelisted explicitly. List the id(s) your
+	 * client plays <em>while actively salvaging</em>; the skilling linger bridges
+	 * the brief "reset" pose between rolls.
 	 */
 	private static final int[] SAILING_SALVAGE_ANIMATIONS = {
-		13584,   // salvaging hook pull (captured from the client debug log while salvaging)
+		13584, // salvaging hook pull (captured from the client debug log while salvaging)
 	};
 
 	private final Map<Integer, String> activityByAnimation;
@@ -104,59 +289,6 @@ public class ActivityAnimationRegistry
 	{
 		this.activityByAnimation = activityByAnimation;
 		this.teleportAnimations = teleportAnimations;
-	}
-
-	private static Map<String, String> buildSkillPrefixes()
-	{
-		// LinkedHashMap: longer / more-specific prefixes must precede any prefix
-		// they could be confused with. (None currently overlap, but the ordering
-		// guarantee is cheap insurance.)
-		LinkedHashMap<String, String> prefixes = new LinkedHashMap<>();
-		prefixes.put("HUMAN_WOODCUTTING", "Woodcutting");
-		prefixes.put("HUMAN_MINING", "Mining");
-		prefixes.put("HUMAN_FISHING", "Fishing");
-		// The sustained "fishing at the spot" loop is HUMAN_FISH_ONSPOT* (623, …) —
-		// a different stem from HUMAN_FISHING_*. Without it the main fishing loop is
-		// invisible to detection and the avatar flickers between casts. Use the full
-		// "HUMAN_FISH_ONSPOT" stem so HUMAN_FISHSIZE (a cutscene) is not swept in.
-		prefixes.put("HUMAN_FISH_ONSPOT", "Fishing");
-		prefixes.put("HUMAN_HARPOON", "Fishing");
-		prefixes.put("HUMAN_SMALLNET", "Fishing");
-		// Big-net fishing uses the HUMAN_LARGENET stem (620) and a separate sustained
-		// loop HUMAN_LARGENET_LOOPING (11042). Like HUMAN_FISH_ONSPOT above, these are a
-		// different stem from the other fishing methods, so without an explicit entry
-		// net fishing is invisible to detection and the avatar flickers between casts.
-		prefixes.put("HUMAN_LARGENET", "Fishing");
-		prefixes.put("HUMAN_SMITHING", "Smithing");
-		prefixes.put("HUMAN_FLETCHING", "Fletching");
-		prefixes.put("HUMAN_HERBING", "Herblore");
-		prefixes.put("HUMAN_COOKING", "Cooking");
-		// Cooking on a fire is HUMAN_FIRECOOKING (897), a different stem from the range
-		// animation HUMAN_COOKING (896) and its HUMAN_COOKING_LOOP. Range cooking is
-		// already smooth because both match the HUMAN_COOKING prefix; fire cooking was
-		// missing, so the avatar flickered to idle between items — the reported bug, and
-		// the same orphan-stem class the HUMAN_FISH_ONSPOT fishing fix resolved.
-		prefixes.put("HUMAN_FIRECOOKING", "Cooking");
-		prefixes.put("HUMAN_RUNECRAFT", "Runecraft");
-		prefixes.put("HUMAN_FARMING", "Farming");
-		prefixes.put("HUMAN_PICKPOCKET", "Thieving");
-		return Collections.unmodifiableMap(prefixes);
-	}
-
-	/**
-	 * @return {@code true} if {@code name} is a non-active pose that shares a
-	 *         whitelisted skill's stem and must therefore be excluded
-	 */
-	private static boolean isExcludedPose(String name)
-	{
-		for (String suffix : EXCLUDED_POSE_SUFFIXES)
-		{
-			if (name.endsWith(suffix))
-			{
-				return true;
-			}
-		}
-		return false;
 	}
 
 	/**
@@ -174,71 +306,44 @@ public class ActivityAnimationRegistry
 		return teleportAnimations.contains(animationId);
 	}
 
-	/**
-	 * Build the registry by reflecting over {@link AnimationID}. Immutable after
-	 * construction.
-	 */
+	/** Build the immutable registry from the baked whitelists above. */
 	public static ActivityAnimationRegistry build()
 	{
 		Map<Integer, String> byAnimation = new HashMap<>();
-		Set<Integer> teleports = new HashSet<>();
+		register(byAnimation, WOODCUTTING_ANIMATIONS, "Woodcutting");
+		register(byAnimation, MINING_ANIMATIONS, "Mining");
+		register(byAnimation, FISHING_ANIMATIONS, "Fishing");
+		register(byAnimation, SMITHING_ANIMATIONS, "Smithing");
+		register(byAnimation, FLETCHING_ANIMATIONS, "Fletching");
+		register(byAnimation, HERBLORE_ANIMATIONS, "Herblore");
+		register(byAnimation, COOKING_ANIMATIONS, "Cooking");
+		register(byAnimation, RUNECRAFT_ANIMATIONS, "Runecraft");
+		register(byAnimation, FARMING_ANIMATIONS, "Farming");
+		register(byAnimation, THIEVING_ANIMATIONS, "Thieving");
 
-		for (Field field : AnimationID.class.getFields())
-		{
-			if (field.getType() != int.class || !Modifier.isStatic(field.getModifiers()))
-			{
-				continue;
-			}
-
-			final int value;
-			try
-			{
-				value = field.getInt(null);
-			}
-			catch (IllegalAccessException ex)
-			{
-				continue;
-			}
-
-			String name = field.getName();
-
-			if (name.startsWith(HOME_TELEPORT_PREFIX))
-			{
-				teleports.add(value);
-				continue;
-			}
-
-			for (Map.Entry<String, String> entry : SKILL_PREFIXES.entrySet())
-			{
-				if (name.startsWith(entry.getKey()))
-				{
-					// A name that matched a skill family but is a non-active pose
-					// (idle/enter/no-items) is dropped entirely, not offered to a
-					// lower-priority prefix — hence break, not continue.
-					if (isExcludedPose(name))
-					{
-						break;
-					}
-					// putIfAbsent: keep the first (highest-priority) prefix match.
-					byAnimation.putIfAbsent(value, entry.getValue());
-					break;
-				}
-			}
-		}
-
-		// Spellbook / jewellery teleport casts (individually named constants).
-		teleports.add(AnimationID.HUMAN_CASTTELEPORT);
-		teleports.add(AnimationID.HUMAN_CAST2_TELEPORT);
-
-		// Sailing salvaging — explicit whitelist (no clean HUMAN_* stem; see the
-		// SAILING_SALVAGE_ANIMATIONS doc). put (not putIfAbsent) so these win.
+		// Sailing salvaging wins over any earlier mapping for the same id.
 		for (int salvageAnimation : SAILING_SALVAGE_ANIMATIONS)
 		{
 			byAnimation.put(salvageAnimation, "Sailing");
 		}
 
+		Set<Integer> teleports = new HashSet<>();
+		for (int teleportAnimation : TELEPORT_ANIMATIONS)
+		{
+			teleports.add(teleportAnimation);
+		}
+
 		return new ActivityAnimationRegistry(
 			Collections.unmodifiableMap(byAnimation),
 			Collections.unmodifiableSet(teleports));
+	}
+
+	/** putIfAbsent each id under {@code label}, preserving any earlier (higher-priority) mapping. */
+	private static void register(Map<Integer, String> byAnimation, int[] animations, String label)
+	{
+		for (int animation : animations)
+		{
+			byAnimation.putIfAbsent(animation, label);
+		}
 	}
 }
