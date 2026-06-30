@@ -1,23 +1,17 @@
 package com.idlefamiliar;
 
-import java.io.BufferedInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.EnumMap;
 import java.util.Map;
-import javax.sound.sampled.AudioInputStream;
-import javax.sound.sampled.AudioSystem;
-import javax.sound.sampled.Clip;
-import javax.sound.sampled.FloatControl;
-import javax.sound.sampled.LineEvent;
-import javax.sound.sampled.LineUnavailableException;
-import javax.sound.sampled.UnsupportedAudioFileException;
+import net.runelite.client.audio.AudioPlayer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
  * Small local-only sound layer for Idle Familiar. It maps high-level plugin
- * events to bundled WAV resources and plays them as short, fire-and-forget clips.
+ * events to bundled WAV resources and plays them as short, fire-and-forget cues
+ * through RuneLite's {@link AudioPlayer}.
  */
 public class SoundController
 {
@@ -30,6 +24,9 @@ public class SoundController
 
 	private volatile boolean enabled = true;
 	private volatile int volumePercent = 70;
+
+	/** Supplied by the plugin once Guice has injected it; until then playback is a no-op. */
+	private volatile AudioPlayer audioPlayer;
 
 	public SoundController()
 	{
@@ -62,6 +59,11 @@ public class SoundController
 		gameEventSounds.put(GameSoundEvent.DEATH, SoundEffect.FROG_CROAK);
 		gameEventSounds.put(GameSoundEvent.COMBAT, SoundEffect.LOW_HP_ALARM);
 		gameEventSounds.put(GameSoundEvent.SKILLING, SoundEffect.INVENTORY_POP);
+	}
+
+	public void setAudioPlayer(AudioPlayer audioPlayer)
+	{
+		this.audioPlayer = audioPlayer;
 	}
 
 	public void setEnabled(boolean enabled)
@@ -127,66 +129,34 @@ public class SoundController
 
 	private void play(SoundEffect effect)
 	{
-		if (!enabled || volumePercent <= 0 || effect == null)
+		final AudioPlayer player = audioPlayer;
+		if (!enabled || volumePercent <= 0 || effect == null || player == null)
 		{
 			return;
 		}
 
 		try
 		{
-			Clip clip = AudioSystem.getClip();
-			try (AudioInputStream audio = openAudio(effect))
-			{
-				clip.open(audio);
-			}
-			applyVolume(clip);
-			clip.addLineListener(event ->
-			{
-				if (event.getType() == LineEvent.Type.STOP)
-				{
-					clip.close();
-				}
-			});
-			clip.start();
+			// Catch broad Exception on purpose: AudioPlayer#play declares the
+			// javax.sound checked exceptions, and referencing those types here is
+			// disallowed on the Plugin Hub. Exception covers them without naming them.
+			player.play(SoundController.class, RESOURCE_DIR + effect.fileName(), gainDecibels());
 		}
-		catch (IOException | LineUnavailableException | UnsupportedAudioFileException | IllegalArgumentException ex)
+		catch (Exception ex)
 		{
 			log.debug("Unable to play Idle Familiar sound {}", effect.fileName(), ex);
 		}
 	}
 
-	private AudioInputStream openAudio(SoundEffect effect)
-		throws IOException, UnsupportedAudioFileException
+	/** Convert the 0-100 volume into a dB gain (0 dB at 100%, quieter below). */
+	private float gainDecibels()
 	{
-		InputStream stream = openSound(effect);
-		if (stream == null)
-		{
-			throw new IOException("Sound resource not found: " + effect.fileName());
-		}
-		return AudioSystem.getAudioInputStream(new BufferedInputStream(stream));
+		float normalized = Math.max(0.0001f, volumePercent / 100.0f);
+		return (float) (20.0 * Math.log10(normalized));
 	}
 
 	private InputStream openSound(SoundEffect effect)
 	{
 		return SoundController.class.getResourceAsStream(RESOURCE_DIR + effect.fileName());
-	}
-
-	private void applyVolume(Clip clip)
-	{
-		if (!clip.isControlSupported(FloatControl.Type.MASTER_GAIN))
-		{
-			return;
-		}
-
-		FloatControl gain = (FloatControl) clip.getControl(FloatControl.Type.MASTER_GAIN);
-		if (volumePercent <= 0)
-		{
-			gain.setValue(gain.getMinimum());
-			return;
-		}
-
-		float normalized = volumePercent / 100.0f;
-		float decibels = (float) (20.0 * Math.log10(normalized));
-		gain.setValue(Math.max(gain.getMinimum(), Math.min(gain.getMaximum(), decibels)));
 	}
 }

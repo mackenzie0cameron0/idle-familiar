@@ -33,6 +33,7 @@ import net.runelite.api.events.StatChanged;
 import net.runelite.api.events.WidgetClosed;
 import net.runelite.api.events.WidgetLoaded;
 import net.runelite.client.RuneLite;
+import net.runelite.client.audio.AudioPlayer;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
@@ -96,6 +97,9 @@ public class IdleFamiliarPlugin extends Plugin
 
 	@Inject
 	private PluginManager pluginManager;
+
+	@Inject
+   	private AudioPlayer audioPlayer;
 
 	/** Primary XP/hr source (matches the XP Tracker panel). Bound only in the XP Tracker plugin's child injector, so resolved lazily via {@link #resolveXpTracker()}; null → {@link #xpRateTracker} fallback. */
 	private XpTrackerService xpTrackerService;
@@ -454,8 +458,8 @@ public class IdleFamiliarPlugin extends Plugin
 
 	private void applySoundConfig()
 	{
-		soundController.setEnabled(config.enableSounds());
-		soundController.setVolumePercent(config.soundVolumePercent());
+		soundController.setAudioPlayer(audioPlayer);
+  		soundController.setEnabled(config.enableSounds());
 	}
 
 	@Subscribe
