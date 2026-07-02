@@ -6,16 +6,19 @@ import java.awt.Color;
 import java.awt.Composite;
 import java.awt.Dimension;
 import java.awt.FontMetrics;
-import java.awt.Frame;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
+import java.awt.LinearGradientPaint;
+import java.awt.Paint;
 import java.awt.Point;
 import java.awt.Rectangle;
 import java.awt.RenderingHints;
+import java.awt.Shape;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.awt.geom.Point2D;
+import java.awt.geom.RoundRectangle2D;
 import java.awt.image.BufferedImage;
-import java.util.function.BooleanSupplier;
 import javax.swing.JComponent;
 import javax.swing.JWindow;
 import javax.swing.SwingUtilities;
@@ -41,8 +44,16 @@ public class DesktopPetWindow
 	/** How often to re-assert the window's always-on-top flag, in millis. */
 	private static final long TOPMOST_REASSERT_INTERVAL_MS = 4000;
 
-	/** Side length of the inline minimize / return-to-game control buttons. */
+	/** Side length of the inline minimize control button. */
 	private static final int CARET_SIZE = 18;
+
+	// --- Attention shimmer ---------------------------------------------------
+	/** Full sweep period of the attention shimmer, in millis. */
+	private static final int SHIMMER_PERIOD_MS = 2200;
+	/** Peak alpha of the shimmer band; kept low for subtlety and further faded by the widget opacity composite. */
+	private static final int SHIMMER_MAX_ALPHA = 85;
+	/** Enchanted-item gold for the shimmer band. */
+	private static final Color SHIMMER_GOLD = new Color(255, 224, 130);
 
 	// Side info-panel (HP / prayer / inventory / XP-hr) metrics, OSRS styled.
 	private static final int PANEL_PADDING = 7;
@@ -64,7 +75,6 @@ public class DesktopPetWindow
 	private final IdleFamiliarPlugin plugin;
 	private final IdleFamiliarConfig config;
 	private final ConfigManager configManager;
-	private final BooleanSupplier gameClientFocusAction;
 	private JWindow window;
 	private Timer repaintTimer;
 	/** Wall-clock millis the always-on-top flag was last re-asserted. */
@@ -75,16 +85,9 @@ public class DesktopPetWindow
 
 	public DesktopPetWindow(IdleFamiliarPlugin plugin, IdleFamiliarConfig config, ConfigManager configManager)
 	{
-		this(plugin, config, configManager, null);
-	}
-
-	public DesktopPetWindow(IdleFamiliarPlugin plugin, IdleFamiliarConfig config,
-		ConfigManager configManager, BooleanSupplier gameClientFocusAction)
-	{
 		this.plugin = plugin;
 		this.config = config;
 		this.configManager = configManager;
-		this.gameClientFocusAction = gameClientFocusAction;
 		this.collapsed = config != null && config.widgetCollapsed();
 	}
 
@@ -217,8 +220,6 @@ public class DesktopPetWindow
 		private Point dragOffset;
 		/** Hit area of the minimize/restore chevron, updated each paint. */
 		private Rectangle caretBounds;
-		/** Hit area of the return-to-game button, updated each paint (null = hidden). */
-		private Rectangle gameButtonBounds;
 
 		private PetComponent()
 		{
@@ -242,15 +243,8 @@ public class DesktopPetWindow
 				@Override
 				public void mouseClicked(MouseEvent event)
 				{
-					Point point = event.getPoint();
-					// The return-to-game button raises the RuneLite client window.
-					if (gameButtonBounds != null && gameButtonBounds.contains(point))
-					{
-						bringGameClientToFront();
-						return;
-					}
 					// The chevron toggles the avatar; the info panel stays either way.
-					if (controlBounds().contains(point))
+					if (controlBounds().contains(event.getPoint()))
 					{
 						toggleCollapse();
 					}
@@ -348,11 +342,9 @@ public class DesktopPetWindow
 			int textWidth = hasText ? metrics.stringWidth(message) + TEXT_PADDING_X * 2 : 0;
 			int textHeight = hasText ? TEXT_ROW_HEIGHT : 0;
 
-			boolean showGame = config.showGameButton();
-
 			int bodyWidth = avatarWidth + (avatarWidth > 0 && hasPanel ? PANEL_GAP : 0) + panelWidth;
 			int bodyHeight = Math.max(avatarHeight, panelHeight);
-			int controlsWidth = (showGame ? CARET_SIZE + 6 : 0) + CARET_SIZE;
+			int controlsWidth = CARET_SIZE;
 
 			int contentWidth = Math.max(Math.max(bodyWidth, controlsWidth), textWidth);
 			int contentHeight = CARET_SIZE + 4 + bodyHeight + (hasText ? TEXT_GAP + textHeight : 0);
@@ -371,13 +363,6 @@ public class DesktopPetWindow
 			caretBounds = new Rectangle(controlX, controlsY, CARET_SIZE, CARET_SIZE);
 			// Points down when collapsed (click to restore the avatar), up when expanded.
 			drawCaret(g, controlX, controlsY, CARET_SIZE, collapsed);
-			controlX += CARET_SIZE + 6;
-			gameButtonBounds = null;
-			if (showGame)
-			{
-				gameButtonBounds = new Rectangle(controlX, controlsY, CARET_SIZE, CARET_SIZE);
-				drawXButton(g, controlX, controlsY, CARET_SIZE);
-			}
 
 			int bodyY = controlsY + CARET_SIZE + 4;
 			int bodyX = originX + (contentWidth - bodyWidth) / 2;
@@ -406,6 +391,13 @@ public class DesktopPetWindow
 					BufferedImage rowIcon = "XP/h".equals(rows[i][0]) ? skillIcon : null;
 					drawPanelRow(g, rows[i][0], rows[i][1], rowIcon, panelX + PANEL_PADDING, rowY, panelInnerWidth, metrics);
 					rowY += PANEL_ROW_HEIGHT;
+				}
+				// Attention shimmer: drawn inside the opacity composite so it fades
+				// with the rest of the panel. Purely decorative — it only reads the
+				// snapshot and paints on this window; it never touches the client.
+				if (config.showAttentionShimmer() && snapshot != null && snapshot.isShimmerActive())
+				{
+					drawShimmer(g, panelX, panelY, panelWidth, panelHeight);
 				}
 				g.setComposite(original);
 			}
@@ -450,16 +442,40 @@ public class DesktopPetWindow
 			g.drawString(value, valueX, baseline);
 		}
 
-		/** Draws the return-to-game button: an X glyph on the same dark rounded backing as the chevron. */
-		private void drawXButton(Graphics2D g, int x, int y, int size)
+		/**
+		 * Draws the attention shimmer: a subtle diagonal golden band (an enchanted-item
+		 * gleam) sweeping across the info panel, clipped to the panel's rounded rect.
+		 * The 100&nbsp;ms repaint timer drives the animation; no extra timer is needed.
+		 */
+		private void drawShimmer(Graphics2D g, int x, int y, int w, int h)
 		{
-			g.setColor(new Color(20, 24, 31, 170));
-			g.fillRoundRect(x, y, size, size, 6, 6);
-			int pad = Math.max(6, size / 4);
-			g.setColor(new Color(235, 235, 235, 235));
-			g.setStroke(new BasicStroke(2f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-			g.drawLine(x + pad, y + pad, x + size - pad, y + size - pad);
-			g.drawLine(x + size - pad, y + pad, x + pad, y + size - pad);
+			double phase = (System.currentTimeMillis() % SHIMMER_PERIOD_MS) / (double) SHIMMER_PERIOD_MS;
+			int band = Math.max(18, (w + h) / 3);
+
+			// The band's centre line satisfies (px - x) + (py - y) = u, sweeping from
+			// fully off the top-left corner to fully off the bottom-right corner.
+			float u = (float) (phase * (w + h + 2 * band)) - band;
+			float cx = x + u / 2f;
+			float cy = y + u / 2f;
+			// Half the band length along the (1,1) gradient axis.
+			float k = (float) (band / (2 * Math.sqrt(2)));
+
+			Color edge = new Color(SHIMMER_GOLD.getRed(), SHIMMER_GOLD.getGreen(), SHIMMER_GOLD.getBlue(), 0);
+			Color core = new Color(SHIMMER_GOLD.getRed(), SHIMMER_GOLD.getGreen(), SHIMMER_GOLD.getBlue(), SHIMMER_MAX_ALPHA);
+			LinearGradientPaint shimmer = new LinearGradientPaint(
+				new Point2D.Float(cx - k, cy - k),
+				new Point2D.Float(cx + k, cy + k),
+				new float[]{0f, 0.5f, 1f},
+				new Color[]{edge, core, edge});
+
+			Shape oldClip = g.getClip();
+			Paint oldPaint = g.getPaint();
+			// Match drawStonePanel's rounded rect so the gleam never bleeds outside the bevel.
+			g.clip(new RoundRectangle2D.Float(x, y, w, h, 5, 5));
+			g.setPaint(shimmer);
+			g.fillRect(x, y, w, h);
+			g.setPaint(oldPaint);
+			g.setClip(oldClip);
 		}
 
 		/** Draws the action/status text on an OSRS stone panel with left edge at {@code x}. */
@@ -488,31 +504,6 @@ public class DesktopPetWindow
 			g.drawLine(x + w - 2, y + 1, x + w - 2, y + h - 2);
 			g.setColor(OSRS_PANEL_DARK);
 			g.drawRoundRect(x, y, w - 1, h - 1, 5, 5);
-		}
-
-		/** Raise the RuneLite client window: find its frame by title via pure AWT, de-iconify and focus it. No-op if not found. */
-		private void bringGameClientToFront()
-		{
-			if (tryFocusGameClient())
-			{
-				return;
-			}
-
-			for (Frame frame : Frame.getFrames())
-			{
-				String title = frame.getTitle();
-				if (isLikelyRuneLiteFrame(title) && frame.isDisplayable())
-				{
-					if (frame.getExtendedState() == Frame.ICONIFIED)
-					{
-						frame.setExtendedState(Frame.NORMAL);
-					}
-					frame.setVisible(true);
-					frame.toFront();
-					frame.requestFocus();
-					return;
-				}
-			}
 		}
 
 		private void fitWindow(int contentWidth, int contentHeight)
@@ -573,32 +564,6 @@ public class DesktopPetWindow
 				graphics.drawLine(cx, top, right, bottom);
 			}
 		}
-	}
-
-	boolean tryFocusGameClient()
-	{
-		if (gameClientFocusAction == null)
-		{
-			return false;
-		}
-		try
-		{
-			return gameClientFocusAction.getAsBoolean();
-		}
-		catch (RuntimeException ignored)
-		{
-			return false;
-		}
-	}
-
-	static boolean isLikelyRuneLiteFrame(String title)
-	{
-		if (title == null)
-		{
-			return false;
-		}
-		String normalized = title.toLowerCase();
-		return normalized.contains("runelite") || normalized.contains("old school runescape");
 	}
 
 	private static float clampAlpha(float value)

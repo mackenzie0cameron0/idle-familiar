@@ -23,7 +23,7 @@ public final class WidgetSnapshot
 {
 	/** A neutral logged-out view, used before the first tick has built a real one. */
 	private static final WidgetSnapshot LOGGED_OUT =
-		new WidgetSnapshot(AvatarState.LOGGED_OUT, "", 0, 0, 0, 0, 0, null, null, null);
+		new WidgetSnapshot(AvatarState.LOGGED_OUT, "", 0, 0, 0, 0, 0, null, null, null, false);
 
 	private final AvatarState state;
 	private final String animationLabel;
@@ -35,9 +35,11 @@ public final class WidgetSnapshot
 	private final String xpHr;
 	private final String message;
 	private final BufferedImage skillIcon;
+	private final boolean shimmerActive;
 
 	public WidgetSnapshot(AvatarState state, String animationLabel, int hitpoints, int maxHitpoints,
-		int prayer, int maxPrayer, int inventoryCount, String xpHr, String message, BufferedImage skillIcon)
+		int prayer, int maxPrayer, int inventoryCount, String xpHr, String message, BufferedImage skillIcon,
+		boolean shimmerActive)
 	{
 		this.state = state;
 		this.animationLabel = animationLabel;
@@ -49,6 +51,7 @@ public final class WidgetSnapshot
 		this.xpHr = xpHr;
 		this.message = message;
 		this.skillIcon = skillIcon;
+		this.shimmerActive = shimmerActive;
 	}
 
 	/** @return a shared, neutral logged-out snapshot for use before the first tick. */
@@ -109,5 +112,11 @@ public final class WidgetSnapshot
 	public BufferedImage getSkillIcon()
 	{
 		return skillIcon;
+	}
+
+	/** Whether the info-panel attention shimmer should be drawn this tick. */
+	public boolean isShimmerActive()
+	{
+		return shimmerActive;
 	}
 }

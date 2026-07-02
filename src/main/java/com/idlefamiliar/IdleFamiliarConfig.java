@@ -180,13 +180,13 @@ public interface IdleFamiliarConfig extends Config
 	}
 
 	@ConfigItem(
-		keyName = "showGameButton",
-		name = "Return-to-game button",
-		description = "Show an X button on the desktop widget that brings the RuneLite game client back to the front",
+		keyName = "showAttentionShimmer",
+		name = "Attention shimmer",
+		description = "Shimmer the info panel when you should tab back (inventory full, AFK warning, low HP/prayer, etc.). Purely visual; never touches the game window.",
 		section = widgetSection,
 		position = 4
 	)
-	default boolean showGameButton()
+	default boolean showAttentionShimmer()
 	{
 		return true;
 	}

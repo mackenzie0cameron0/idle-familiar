@@ -44,7 +44,6 @@ import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.plugins.PluginManager;
 import net.runelite.client.plugins.xptracker.XpTrackerPlugin;
 import net.runelite.client.plugins.xptracker.XpTrackerService;
-import net.runelite.client.ui.ClientUI;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -93,9 +92,6 @@ public class IdleFamiliarPlugin extends Plugin
 	private SpriteManager spriteManager;
 
 	@Inject
-	private ClientUI clientUI;
-
-	@Inject
 	private PluginManager pluginManager;
 
 	@Inject
@@ -112,6 +108,8 @@ public class IdleFamiliarPlugin extends Plugin
 	private final NotificationController notificationController = new NotificationController();
 	private final SoundController soundController = new SoundController();
 	private final SoundCueGate soundCueGate = new SoundCueGate();
+	/** Arm/clear state machine for the info-panel attention shimmer (client thread; published via {@link #widgetSnapshot}). */
+	private final ShimmerController shimmerController = new ShimmerController();
 	private final SkillingActivityTracker skillingTracker = new SkillingActivityTracker();
 	private final ActivityAnimationRegistry activityRegistry = ActivityAnimationRegistry.build();
 	/** Per-session XP/hr source for the widget readout. (The XP Tracker plugin's service is not injectable from an external plugin.) */
@@ -184,7 +182,7 @@ public class IdleFamiliarPlugin extends Plugin
 
 		animationController.loadDefaultAnimations();
 		applySoundConfig();
-		desktopPetWindow = new DesktopPetWindow(this, config, configManager, this::focusGameClient);
+		desktopPetWindow = new DesktopPetWindow(this, config, configManager);
 		idleStateTracker.reset(0);
 		activityService.reset();
 		skillingTracker.reset();
@@ -205,6 +203,7 @@ public class IdleFamiliarPlugin extends Plugin
 		lastSoundAvatarState = null;
 		lastSoundActivityLabel = "";
 		soundCueGate.reset();
+		shimmerController.reset();
 		desktopPetWindow.refreshVisibility();
 
 		log.debug("Idle Familiar started");
@@ -262,6 +261,7 @@ public class IdleFamiliarPlugin extends Plugin
 			lowHitpointsWasActive = false;
 			lowPrayerWasActive = false;
 			soundCueGate.reset();
+			shimmerController.reset();
 			handleAvatarStateTransition(AvatarState.LOGGED_OUT);
 			publishWidgetSnapshot();
 			return;
@@ -276,6 +276,7 @@ public class IdleFamiliarPlugin extends Plugin
 		updateInventoryFull();
 		updateLingeringActivity(localPlayer);
 		resolveCurrentState();
+		updateShimmer();
 		updateConfirmedSkillIcon();
 		updateXpHr();
 		publishWidgetSnapshot();
@@ -711,7 +712,8 @@ public class IdleFamiliarPlugin extends Plugin
 			cachedInventoryCount,
 			cachedXpHr,
 			message,
-			confirmedSkillIcon);
+			confirmedSkillIcon,
+			shimmerController.isActive());
 	}
 
 	private void updateMovement(Player localPlayer)
@@ -1265,22 +1267,27 @@ public class IdleFamiliarPlugin extends Plugin
 		return configManager.getConfig(IdleFamiliarConfig.class);
 	}
 
-	private boolean focusGameClient()
+	/**
+	 * Advance the attention-shimmer state machine from this tick's resolved state
+	 * and cached conditions. Runs after {@link #resolveCurrentState()} so the
+	 * controller sees the same state the widget is about to paint.
+	 *
+	 * <p>Inventory fullness is the RAW slot count (not the resolved
+	 * {@code INVENTORY_FULL} state, which skilling outranks). {@code updateVitals()}
+	 * ran earlier this tick, so the {@code *WasActive} fields hold the CURRENT
+	 * low-HP/low-prayer readings at this point.
+	 */
+	private void updateShimmer()
 	{
-		if (clientUI == null)
-		{
-			return false;
-		}
-		try
-		{
-			clientUI.forceFocus();
-			clientUI.requestFocus();
-			return true;
-		}
-		catch (RuntimeException ex)
-		{
-			log.debug("Unable to focus RuneLite client from desktop widget", ex);
-			return false;
-		}
+		shimmerController.tick(
+			currentAvatarState,
+			cachedInventoryCount >= 28,
+			lowHitpointsWasActive,
+			lowPrayerWasActive,
+			idleStateTracker.isAfkWarning(config.afkWarningThresholdTicks()),
+			deathTicksRemaining > 0,
+			levelUpTicksRemaining > 0,
+			cachedHitpoints > config.lowHpThreshold(),
+			cachedPrayer > config.lowPrayerThreshold());
 	}
 }

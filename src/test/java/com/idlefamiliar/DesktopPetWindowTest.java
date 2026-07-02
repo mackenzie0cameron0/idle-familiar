@@ -4,7 +4,6 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
-import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.Test;
 
 /**
@@ -46,39 +45,5 @@ public class DesktopPetWindowTest
 	public void carrotSizeIsCollapsedDimension()
 	{
 		assertEquals(28, DesktopPetWindow.CARROT_SIZE);
-	}
-
-	@Test
-	public void returnToGameUsesInjectedFocusAction()
-	{
-		AtomicInteger calls = new AtomicInteger();
-		DesktopPetWindow widget = new DesktopPetWindow(null, null, null, () ->
-		{
-			calls.incrementAndGet();
-			return true;
-		});
-
-		assertTrue(widget.tryFocusGameClient());
-		assertEquals(1, calls.get());
-	}
-
-	@Test
-	public void failedFocusActionFallsBack()
-	{
-		DesktopPetWindow widget = new DesktopPetWindow(null, null, null, () ->
-		{
-			throw new IllegalStateException("not ready");
-		});
-
-		assertFalse(widget.tryFocusGameClient());
-	}
-
-	@Test
-	public void fallbackFrameTitleAcceptsRuneLiteAndOsrsTitles()
-	{
-		assertTrue(DesktopPetWindow.isLikelyRuneLiteFrame("RuneLite"));
-		assertTrue(DesktopPetWindow.isLikelyRuneLiteFrame("Old School RuneScape"));
-		assertFalse(DesktopPetWindow.isLikelyRuneLiteFrame("Idle Familiar"));
-		assertFalse(DesktopPetWindow.isLikelyRuneLiteFrame(null));
 	}
 }
